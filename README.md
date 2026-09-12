@@ -1,5 +1,7 @@
 # Pratyaya - Monumentally Scale Your Prompts
 
+[VSCode Marketplace Page](https://marketplace.visualstudio.com/items?itemName=kapv89.pratyaya)
+
 ![spec.md](images/spec.md.png)
 
 Capture the key concepts of a large markdown spec while you write it.
