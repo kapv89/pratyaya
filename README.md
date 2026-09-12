@@ -2,7 +2,7 @@
 
 [VSCode Marketplace Page](https://marketplace.visualstudio.com/items?itemName=kapv89.pratyaya)
 
-![top secret spec.md screenshot](images/spec.md.png)
+![top secret spec.md screenshot](images/secret.spec.md.png)
 
 Capture the key concepts of a large markdown spec while you write it.
 
