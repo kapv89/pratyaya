@@ -42,13 +42,13 @@ jobs:
       - name: Publish to the VS Code Marketplace
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: npx vsce publish --packagePath pratyaya.vsix
+        run: npx vsce publish --packagePath pratyaya.vsix --skip-duplicate
 
       - name: Publish to Open VSX
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
         if: ${{ env.OVSX_PAT != '' }}
-        run: npx ovsx publish pratyaya.vsix
+        run: npx ovsx publish pratyaya.vsix --skip-duplicate
 
       - name: Attach the build to a GitHub release
         if: startsWith(github.ref, 'refs/tags/v')

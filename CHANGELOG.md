@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.0
+
+First stable release. Rolls up everything since 0.4.2, the last version on the
+Marketplace; 0.4.3 and 0.5.0 below were never published on their own.
+
+- `$->define` walks `root` from the start of a line and turns it into a
+  `#### $.a.b` definition heading; the text under it is stored on the concept as
+  `($.def)` and carried into dumps, the live view and tooltips.
+- `dump` sits beside `root` in the scope rather than on it, so `root` is pure
+  data and a concept may itself be named `dump`.
+
 ## 0.5.0
 
 - New `$->define` function. Typed at the start of a line it walks `root` a level
