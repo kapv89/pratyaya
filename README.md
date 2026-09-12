@@ -15,6 +15,8 @@ It is built for specs written to be handed to coding agents such as Claude Code:
 the `$` references keep concept names consistent as the document grows, and the
 dump gives the agent — and you — the full concept map in one block.
 
+The `$` is a type of an ode to my first commercial programming language - [PHP](https://www.php.net/).
+
 ## How it works
 
 Every markdown document has a `root` object attached to it, held in memory and
