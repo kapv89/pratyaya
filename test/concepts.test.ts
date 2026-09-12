@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   buildTree,
   conceptSpans,
+  scopeFunctionsMatching,
   dumpText,
   parseContextAt,
   suggestionsFor,
@@ -134,11 +135,27 @@ test('an invalid expression stays invalid as more is typed', () => {
   assert.equal(contextAtEnd('$.\\.*$.screens.Splash').kind, 'invalid');
 });
 
-test('the dump accessor is recognised while it is being typed', () => {
-  assert.deepEqual(contextAtEnd('$-'), { kind: 'dump', exprStart: 0, partial: '' });
-  assert.deepEqual(contextAtEnd('$->'), { kind: 'dump', exprStart: 0, partial: '' });
-  assert.deepEqual(contextAtEnd('$->du'), { kind: 'dump', exprStart: 0, partial: 'du' });
-  assert.deepEqual(contextAtEnd('$->dump'), { kind: 'dump', exprStart: 0, partial: 'dump' });
+test('the function accessor is recognised while it is being typed', () => {
+  assert.deepEqual(contextAtEnd('$-'), { kind: 'function', exprStart: 0, partial: '' });
+  assert.deepEqual(contextAtEnd('$->'), { kind: 'function', exprStart: 0, partial: '' });
+  assert.deepEqual(contextAtEnd('$->du'), { kind: 'function', exprStart: 0, partial: 'du' });
+  assert.deepEqual(contextAtEnd('$->dump'), { kind: 'function', exprStart: 0, partial: 'dump' });
+});
+
+test('the function accessor offers the scope functions, filtered by prefix', () => {
+  assert.deepEqual(scopeFunctionsMatching('').map((fn) => fn.name), ['dump']);
+  assert.deepEqual(scopeFunctionsMatching('du').map((fn) => fn.name), ['dump']);
+  assert.deepEqual(scopeFunctionsMatching('zz'), []);
+});
+
+test('scope functions sit beside root rather than inside it', () => {
+  // `->` reaches a function, and functions never become data.
+  assert.deepEqual(buildTree('$->dump and $.screens.Splash'), {
+    screens: { '($)': 'screens', Splash: { '($)': 'Splash' } },
+  });
+
+  // `.` reaches data, so a concept may be called dump without colliding.
+  assert.deepEqual(buildTree('$.dump'), { dump: { '($)': 'dump' } });
 });
 
 test('prose outside an expression is not a completion context', () => {

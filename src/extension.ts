@@ -3,13 +3,14 @@ import {
   childKeys,
   countDescendants,
   dumpJson,
-  dumpText,
   parseContextAt,
   resolveNode,
   suggestionsFor,
+  scopeFunction,
+  scopeFunctionsMatching,
   ConceptNode,
-  DUMP_ACCESSOR,
-  DUMP_NAME,
+  ScopeFunction,
+  FUNCTION_ACCESSOR,
   MARKER,
 } from './concepts';
 import { ConceptHighlighter } from './highlight';
@@ -76,7 +77,10 @@ export function activate(context: vscode.ExtensionContext) {
         registerProvider();
       }
     }),
-    vscode.commands.registerCommand('pratyaya.dump', () => dumpAtCursor(store)),
+    vscode.commands.registerCommand('pratyaya.dump', () => runFunction(store, 'dump')),
+    vscode.commands.registerCommand('pratyaya.runFunction', (name: string) =>
+      runFunction(store, name)
+    ),
     vscode.commands.registerCommand('pratyaya.showTree', () => showLiveTree(liveDocuments)),
     vscode.commands.registerCommand('pratyaya.insertPath', (item?: ConceptItem) =>
       insertPath(item)
@@ -117,12 +121,11 @@ class ConceptCompletionProvider implements vscode.CompletionItemProvider {
     const root = this.store.tree(document);
     const exprRange = new vscode.Range(document.positionAt(context.exprStart), position);
 
-    if (context.kind === 'dump') {
-      const item = dumpItem(root, exprRange);
-      return new vscode.CompletionList(
-        DUMP_NAME.startsWith(context.partial.toLowerCase()) ? [item] : [],
-        true
+    if (context.kind === 'function') {
+      const items = scopeFunctionsMatching(context.partial).map((fn) =>
+        functionItem(fn, root, exprRange)
       );
+      return new vscode.CompletionList(items, true);
     }
 
     const { segments, partial } = context;
@@ -172,26 +175,34 @@ function conceptItem(
   return item;
 }
 
-function dumpItem(root: ConceptNode, exprRange: vscode.Range): vscode.CompletionItem {
-  const item = new vscode.CompletionItem(DUMP_NAME, vscode.CompletionItemKind.Function);
+function functionItem(
+  fn: ScopeFunction,
+  root: ConceptNode,
+  exprRange: vscode.Range
+): vscode.CompletionItem {
+  const item = new vscode.CompletionItem(fn.name, vscode.CompletionItemKind.Function);
 
-  const expression = `${MARKER}${DUMP_ACCESSOR}${DUMP_NAME}`;
-  item.detail = `${expression} - insert the whole concept tree`;
+  const expression = `${MARKER}${FUNCTION_ACCESSOR}${fn.name}`;
+  item.detail = `${expression} - ${fn.summary}`;
   // The replace range starts at the marker, so VS Code filters against the whole
   // expression as typed. Filtering on `dump` alone would never match `$->dump`
   // and the widget would silently drop this item.
   item.filterText = expression;
-  item.sortText = 'zzzz';
+  item.sortText = fn.name;
 
-  // Accepting removes the expression and lets `pratyaya.dump` write the JSON, so
-  // the dump is built when it is inserted rather than when the list was offered.
+  // Accepting clears the expression and lets the command render the replacement,
+  // so the text is built when it is inserted rather than when the list was made.
   item.insertText = '';
   item.range = exprRange;
-  item.command = { command: 'pratyaya.dump', title: 'Dump concept tree' };
+  item.command = {
+    command: 'pratyaya.runFunction',
+    title: fn.summary,
+    arguments: [fn.name],
+  };
 
   const documentation = new vscode.MarkdownString();
   documentation.appendMarkdown(
-    `Replaces the expression with the full \`root\` object (${countDescendants(root)} concepts).\n\n`
+    `\`${expression}\` - ${fn.summary} (${countDescendants(root)} concepts).\n\n`
   );
   documentation.appendCodeblock(dumpJson(root), 'json');
   item.documentation = documentation;
@@ -219,12 +230,14 @@ function invalidItem(position: vscode.Position): vscode.CompletionItem {
   return item;
 }
 
-async function dumpAtCursor(store: ConceptStore) {
+/** Writes a scope function's output at the cursor, rendered from the live tree. */
+async function runFunction(store: ConceptStore, name: string) {
   const editor = vscode.window.activeTextEditor;
-  if (!editor) {
+  const fn = scopeFunction(name);
+  if (!editor || !fn) {
     return;
   }
-  const text = dumpText(store.tree(editor.document), dumpAsCodeBlock());
+  const text = fn.render(store.tree(editor.document), { asCodeBlock: dumpAsCodeBlock() });
   await editor.edit((builder) => {
     for (const selection of editor.selections) {
       builder.replace(selection, text);

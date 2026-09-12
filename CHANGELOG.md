@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.3
+
+- `dump` now sits beside `root` in the scope rather than being a special function
+  on it. `root` is pure data: only concepts, nothing else.
+- Scope functions are a registry in `concepts.ts` instead of a special case
+  threaded through the completion provider, so adding one is a single entry.
+- Because the namespaces are separate, a concept may be named `dump`: `$.dump` is
+  data, `$->dump` is the function.
+- No change to what you type.
+
 ## 0.4.2
 
 - Added an extension icon and a gallery banner for the Marketplace listing.

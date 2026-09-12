@@ -13,14 +13,56 @@ export const MARKER = '$';
  */
 export const MARKER_KEY = '($)';
 
-/** The accessor that opens the special `dump` function: `($)->dump`. */
-export const DUMP_ACCESSOR = '->';
-
-/** Name of the special function on `root`. */
-export const DUMP_NAME = 'dump';
+/**
+ * The accessor that reaches the scope's functions: `$->dump`.
+ *
+ * The marker opens a scope holding two things side by side: `root`, the concept
+ * tree, reached with `.`; and the functions below, reached with `->`. A function
+ * is never a member of `root` - it cannot be written into the tree, it never
+ * appears in a dump, and it never shows up as a concept.
+ */
+export const FUNCTION_ACCESSOR = '->';
 
 export interface ConceptNode {
   [key: string]: ConceptNode | string;
+}
+
+/** How a scope function renders its replacement text. */
+export interface RenderOptions {
+  asCodeBlock: boolean;
+}
+
+/** One of the functions sitting beside `root` in the scope. */
+export interface ScopeFunction {
+  /** Name as typed after the accessor. */
+  name: string;
+  /** One line describing it, shown beside the suggestion. */
+  summary: string;
+  /** The text that replaces the expression when the suggestion is accepted. */
+  render(root: ConceptNode, options: RenderOptions): string;
+}
+
+/**
+ * The scope's functions. `root` is not in here and these are not in `root`: the
+ * two live beside each other, which is what keeps the tree pure data.
+ */
+export const SCOPE_FUNCTIONS: readonly ScopeFunction[] = [
+  {
+    name: 'dump',
+    summary: 'insert the whole concept tree as formatted JSON',
+    render: (root, options) => dumpText(root, options.asCodeBlock),
+  },
+];
+
+/** Scope functions whose name starts with what has been typed so far. */
+export function scopeFunctionsMatching(partial: string): ScopeFunction[] {
+  const prefix = partial.toLowerCase();
+  return SCOPE_FUNCTIONS.filter((fn) => fn.name.toLowerCase().startsWith(prefix));
+}
+
+/** Looks a scope function up by name. */
+export function scopeFunction(name: string): ScopeFunction | undefined {
+  return SCOPE_FUNCTIONS.find((fn) => fn.name === name);
 }
 
 /** Characters allowed inside a single path segment. */
@@ -95,7 +137,7 @@ export interface ConceptSpan {
 
 /**
  * Locates the concept expressions in a document: a `$` with its dotted path, or
- * with the `->dump` accessor. A span stops where the expression stops, so prose
+ * with the `->` function accessor. A span stops where the expression stops, so prose
  * or punctuation written straight after it is left uncoloured, and a lone `$` -
  * a price, a shell prompt, some maths - is not a concept at all.
  */
@@ -116,15 +158,15 @@ export type Context =
    * the segment being typed, empty right after a `.`.
    */
   | { kind: 'path'; exprStart: number; segments: string[]; partial: string }
-  /** Cursor is inside `$->…`; `partial` is what follows the accessor. */
-  | { kind: 'dump'; exprStart: number; partial: string };
+  /** Cursor is inside `$->…`; `partial` is the function name being typed. */
+  | { kind: 'function'; exprStart: number; partial: string };
 
 /**
  * Classifies the text immediately before `offset`.
  *
  * An expression runs from the first `$` of the current whitespace-delimited run
  * up to the cursor, and only counts once an accessor follows it: `$.` for a path
- * or `$->` for the dump function. That keeps every other `$` in a spec - prices,
+ * or `$->` for a scope function. That keeps every other `$` in a spec - prices,
  * shell snippets, maths - out of the way. Once an accessor has been opened,
  * anything that is not a well formed path puts the expression into the invalid
  * state, from which nothing can be applied.
@@ -156,15 +198,15 @@ export function parseContextAt(text: string, offset: number): Context {
   }
 
   if (tail.startsWith('-')) {
-    if (DUMP_ACCESSOR.startsWith(tail)) {
-      return { kind: 'dump', exprStart, partial: '' };
+    if (FUNCTION_ACCESSOR.startsWith(tail)) {
+      return { kind: 'function', exprStart, partial: '' };
     }
-    if (!tail.startsWith(DUMP_ACCESSOR)) {
-      return { kind: 'none' }; // a stray hyphen, not the dump accessor
+    if (!tail.startsWith(FUNCTION_ACCESSOR)) {
+      return { kind: 'none' }; // a stray hyphen, not the function accessor
     }
-    const partial = tail.slice(DUMP_ACCESSOR.length);
+    const partial = tail.slice(FUNCTION_ACCESSOR.length);
     return SEGMENT_RE.test(partial)
-      ? { kind: 'dump', exprStart, partial }
+      ? { kind: 'function', exprStart, partial }
       : { kind: 'invalid', exprStart, tail };
   }
 

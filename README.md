@@ -52,9 +52,24 @@ alongside it, in the order they first appear in the document. The sigil you type
 is short - `$` - while the object keeps the longer `($)` marker, so a dumped tree
 stays readable on its own.
 
-A `$` only opens a concept once an accessor follows it, `$.` for a path or `$->`
-for the dump function. Every other dollar in a spec - `$5`, `$100`, `$(pwd)`,
-`$x$` - is left alone: no suggestions, no highlight, nothing in the tree.
+## The scope
+
+`$` opens a scope holding two things, side by side:
+
+| Reached with | What it is |
+| --- | --- |
+| `$.` | **`root`** - the concept tree. Pure data: concepts and nothing else. |
+| `$->` | **functions** - `dump` today. |
+
+A function is not a member of `root` and `root` is not a member of the functions.
+Nothing reached through `->` can ever be written into the tree, show up in a dump,
+or appear in the Concepts view - and because the two namespaces are separate, a
+concept of your own may be called `dump` without colliding with the function:
+`$.dump` is data, `$->dump` is the function.
+
+A `$` only opens the scope once an accessor follows it. Every other dollar in a
+spec - `$5`, `$100`, `$(pwd)`, `$x$` - is left alone: no suggestions, no
+highlight, nothing in the tree.
 
 ## Completion
 
@@ -64,6 +79,7 @@ for the dump function. Every other dollar in a spec - `$5`, `$100`, `$(pwd)`,
 | `$.screens.` | that node's children — `Splash`, `NewUsername` |
 | `$.screens.S` | `Splash` only — filtering is by prefix, case-insensitive |
 | `$.screens.Payments` | nothing to suggest; the new concept is added to the tree |
+| `$->` | the scope's functions - `dump` |
 | `$->dump` | the whole tree, as a formatted JSON block |
 
 Suggestions keep document order rather than sorting alphabetically, so the list
@@ -124,7 +140,9 @@ Press <kbd>F5</kbd> to open an Extension Development Host on `examples/`.
 
 The concept tree lives in [`src/concepts.ts`](src/concepts.ts) as pure functions
 with no VS Code imports — parsing, tree building, filtering and dumping are all
-unit tested in [`test/concepts.test.ts`](test/concepts.test.ts).
+unit tested in [`test/concepts.test.ts`](test/concepts.test.ts). The scope's
+functions are a registry in that same file; adding one there is enough for it to
+be offered after `$->` and rendered when accepted.
 [`src/store.ts`](src/store.ts) attaches a live tree to each document,
 [`src/highlight.ts`](src/highlight.ts) colours the expressions,
 [`src/views.ts`](src/views.ts) draws the sidebar and the live JSON view, and
