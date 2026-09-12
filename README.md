@@ -110,8 +110,9 @@ Choosing `()` ends the walk and rewrites the line as a heading:
 
 Everything under that heading is the definition. It ends at the first line that
 is `---`, or a heading of level one to four - the next definition included - or
-the end of the document, whose final newline is left out. It lands on the concept
-itself, under `($.def)`, beside the name:
+the end of the document. A single blank line either side is left out: the one you
+write after the heading, and the final newline of a document. It lands on the
+concept itself, under `($.def)`, beside the name:
 
 ```json
 {

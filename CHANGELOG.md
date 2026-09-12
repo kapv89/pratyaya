@@ -8,6 +8,8 @@
 - Everything under such a heading is the concept's definition, stored on the
   concept as `($.def)` and carried into dumps, the live view and tooltips. It
   ends at a `---` rule, a heading of level one to four, or the end of the file.
+  A single blank line either side is dropped - the one after the heading, and the
+  document's final newline - since both are page layout rather than definition.
 - Definition headings are coloured whole once their concept resolves.
 - Scope functions can now take a path, so `define` is a registry entry rather
   than a special case.

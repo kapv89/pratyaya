@@ -131,8 +131,9 @@ export interface DefinitionHeading {
  *
  * A definition runs from the line after its heading until a line that is just
  * `---`, or a heading of level 1 to 4 (the next definition included), or the end
- * of the document - in which case the final newline is dropped, since it belongs
- * to the document rather than to the definition.
+ * of the document. A single blank line either side is dropped: the one after the
+ * heading, and at the end of a document the final newline. Both belong to the
+ * layout of the page rather than to the definition.
  */
 export function definitionHeadings(text: string): DefinitionHeading[] {
   const lines: { text: string; start: number }[] = [];
@@ -160,7 +161,7 @@ export function definitionHeadings(text: string): DefinitionHeading[] {
       }
     }
 
-    let body = text.slice(bodyStart, end);
+    let body = text.slice(bodyStart, end).replace(/^\r?\n/, '');
     if (atEof) {
       body = body.replace(/\r?\n$/, '');
     }

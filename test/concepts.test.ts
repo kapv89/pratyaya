@@ -318,6 +318,13 @@ test('a definition runs to the next heading of level 1 to 4', () => {
   assert.equal(definitionHeadings(text)[0].body, 'body\n##### Five\nmore');
 });
 
+test('a definition drops one blank line after its heading', () => {
+  assert.equal(definitionHeadings('#### $.a\n\nbody\n---')[0].body, 'body\n');
+  assert.equal(definitionHeadings('#### $.a\n\n\nbody\n---')[0].body, '\nbody\n');
+  assert.equal(definitionHeadings('#### $.a\nbody\n---')[0].body, 'body\n');
+  assert.equal(definitionHeadings('#### $.a\n\nbody')[0].body, 'body');
+});
+
 test('a definition running to the end of the document drops its last newline', () => {
   assert.equal(definitionHeadings('#### $.a\nbody\n')[0].body, 'body');
   assert.equal(definitionHeadings('#### $.a\nbody')[0].body, 'body');
