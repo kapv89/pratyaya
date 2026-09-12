@@ -1,4 +1,6 @@
-# Pratyaya
+# Pratyaya - Monumentally Scale Your Prompts
+
+![spec.md](images/spec.md.png)
 
 Capture the key concepts of a large markdown spec while you write it.
 
