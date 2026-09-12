@@ -1,0 +1,149 @@
+{
+  "name": "pratyaya",
+  "displayName": "Pratyaya",
+  "description": "Capture key concepts inside large markdown specs with a $ concept tree, autocomplete, and JSON dump.",
+  "version": "0.4.1",
+  "publisher": "kapv89",
+  "license": "MIT",
+  "author": {
+    "name": "kapv89"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kapv89/pratyaya.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kapv89/pratyaya/issues"
+  },
+  "homepage": "https://github.com/kapv89/pratyaya#readme",
+  "keywords": [
+    "markdown",
+    "spec",
+    "outline",
+    "concepts",
+    "autocomplete"
+  ],
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "main": "./out/src/extension.js",
+  "activationEvents": [
+    "onLanguage:markdown",
+    "onView:pratyaya.conceptTree"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "pratyaya.dump",
+        "title": "Pratyaya: Dump concept tree at cursor",
+        "enablement": "editorLangId == markdown"
+      },
+      {
+        "command": "pratyaya.showTree",
+        "title": "Pratyaya: Show live concept tree",
+        "enablement": "editorLangId == markdown",
+        "icon": "$(json)"
+      },
+      {
+        "command": "pratyaya.insertPath",
+        "title": "Insert reference",
+        "icon": "$(insert)"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "pratyaya.conceptTree",
+          "name": "Concepts",
+          "icon": "$(symbol-namespace)",
+          "contextualTitle": "Pratyaya Concepts",
+          "visibility": "collapsed"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "pratyaya.showTree",
+          "when": "view == pratyaya.conceptTree",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "pratyaya.insertPath",
+          "when": "view == pratyaya.conceptTree && viewItem == pratyayaConcept",
+          "group": "inline"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "pratyaya.insertPath",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Pratyaya",
+      "properties": {
+        "pratyaya.enabledLanguages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "markdown"
+          ],
+          "description": "Language ids where the $ concept tree is active."
+        },
+        "pratyaya.dumpAsCodeBlock": {
+          "type": "boolean",
+          "default": true,
+          "description": "Wrap the ($)->dump output in a fenced ```json code block."
+        },
+        "pratyaya.highlightConcepts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Colour $ concept expressions in the editor."
+        },
+        "pratyaya.conceptColor.dark": {
+          "type": "string",
+          "default": "#05c3f9",
+          "pattern": "^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "patternErrorMessage": "Use a hex colour such as #05c3f9.",
+          "description": "Text colour for $ concept expressions on dark themes."
+        },
+        "pratyaya.conceptColor.light": {
+          "type": "string",
+          "default": "#800c0c",
+          "pattern": "^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "patternErrorMessage": "Use a hex colour such as #800c0c.",
+          "description": "Text colour for $ concept expressions on light themes."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile",
+    "test": "npm run compile && node --test out/test/concepts.test.js",
+    "package": "vsce package",
+    "test:integration": "npm run compile && node out/test/integration/runTest.js",
+    "test:all": "npm test && npm run test:integration"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.11.30",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^3.2.1",
+    "glob": "^13.0.6",
+    "mocha": "^12.0.1",
+    "typescript": "^5.4.5"
+  }
+}
