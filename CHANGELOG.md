@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0
+
+- New `$->define` function. Typed at the start of a line it walks `root` a level
+  at a time, offering `()` to define the concept it has landed on and `.` to go
+  deeper. `()` rewrites the line as a `#### $.a.b` heading.
+- Everything under such a heading is the concept's definition, stored on the
+  concept as `($.def)` and carried into dumps, the live view and tooltips. It
+  ends at a `---` rule, a heading of level one to four, or the end of the file.
+- Definition headings are coloured whole once their concept resolves.
+- Scope functions can now take a path, so `define` is a registry entry rather
+  than a special case.
+
 ## 0.4.3
 
 - `dump` now sits beside `root` in the scope rather than being a special function

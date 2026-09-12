@@ -3,9 +3,12 @@ import { test } from 'node:test';
 import {
   buildTree,
   conceptSpans,
-  scopeFunctionsMatching,
+  definitionHeadings,
   dumpText,
   parseContextAt,
+  pathActions,
+  scopeFunctionsMatching,
+  startsLine,
   suggestionsFor,
   Context,
 } from '../src/concepts';
@@ -125,7 +128,7 @@ test('a mid-word cursor still sees the word it is inside', () => {
 });
 
 test('malformed expressions are invalid', () => {
-  for (const text of ['$.\\.*$', '$..', '$.a..b', '$.a.b/c', '$->du!']) {
+  for (const text of ['$.\\.*$', '$..', '$.a..b', '$.a.b/c', '$->du/mp']) {
     assert.equal(contextAtEnd(text).kind, 'invalid', text);
   }
 });
@@ -143,9 +146,16 @@ test('the function accessor is recognised while it is being typed', () => {
 });
 
 test('the function accessor offers the scope functions, filtered by prefix', () => {
-  assert.deepEqual(scopeFunctionsMatching('').map((fn) => fn.name), ['dump']);
+  assert.deepEqual(scopeFunctionsMatching('').map((fn) => fn.name), ['dump', 'define']);
+  assert.deepEqual(scopeFunctionsMatching('d').map((fn) => fn.name), ['dump', 'define']);
   assert.deepEqual(scopeFunctionsMatching('du').map((fn) => fn.name), ['dump']);
+  assert.deepEqual(scopeFunctionsMatching('de').map((fn) => fn.name), ['define']);
   assert.deepEqual(scopeFunctionsMatching('zz'), []);
+});
+
+test('prose punctuation closes a function expression too', () => {
+  assert.equal(contextAtEnd('run ($->dump)').kind, 'none');
+  assert.equal(contextAtEnd('see $->define.auth,').kind, 'none');
 });
 
 test('scope functions sit beside root rather than inside it', () => {
@@ -216,4 +226,144 @@ test('concept spans ignore junk in a malformed expression', () => {
     conceptSpans(text).map((span) => text.slice(span.start, span.end)),
     ['$.x']
   );
+});
+
+// --- $->define -------------------------------------------------------------
+
+test('the define walk is parsed level by level', () => {
+  assert.deepEqual(contextAtEnd('$->define'), { kind: 'function', exprStart: 0, partial: 'define' });
+  assert.deepEqual(contextAtEnd('$->define.'), {
+    kind: 'functionPath',
+    exprStart: 0,
+    name: 'define',
+    segments: [],
+    partial: '',
+  });
+  assert.deepEqual(contextAtEnd('$->define.au'), {
+    kind: 'functionPath',
+    exprStart: 0,
+    name: 'define',
+    segments: [],
+    partial: 'au',
+  });
+  assert.deepEqual(contextAtEnd('$->define.auth.web'), {
+    kind: 'functionPath',
+    exprStart: 0,
+    name: 'define',
+    segments: ['auth'],
+    partial: 'web',
+  });
+});
+
+test('only a path function may be followed by a path', () => {
+  assert.equal(contextAtEnd('$->dump.screens').kind, 'invalid');
+  assert.equal(contextAtEnd('$->nope.screens').kind, 'invalid');
+});
+
+test('the walk suggests concepts at each level', () => {
+  const doc = '$.auth.token $.auth.web $.screens.Splash\n\n';
+  const tree = buildTree(doc);
+
+  const atRoot = contextAtEnd(doc + '$->define.');
+  assert.equal(atRoot.kind, 'functionPath');
+  if (atRoot.kind !== 'functionPath') throw new Error('unreachable');
+  assert.deepEqual(suggestionsFor(tree, atRoot.segments, atRoot.partial), ['auth', 'screens']);
+
+  const typing = contextAtEnd(doc + '$->define.s');
+  assert.equal(typing.kind, 'functionPath');
+  if (typing.kind !== 'functionPath') throw new Error('unreachable');
+  assert.deepEqual(suggestionsFor(tree, typing.segments, typing.partial), ['screens']);
+
+  const nested = contextAtEnd(doc + '$->define.auth.');
+  assert.equal(nested.kind, 'functionPath');
+  if (nested.kind !== 'functionPath') throw new Error('unreachable');
+  assert.deepEqual(suggestionsFor(tree, nested.segments, nested.partial), ['token', 'web']);
+});
+
+test('() appears on a real concept, and . only when it has children', () => {
+  const tree = buildTree('$.auth.token $.screens');
+
+  assert.deepEqual(pathActions(tree, [], 'auth'), { call: true, descend: true });
+  assert.deepEqual(pathActions(tree, [], 'screens'), { call: true, descend: false });
+  assert.deepEqual(pathActions(tree, ['auth'], 'token'), { call: true, descend: false });
+
+  // Nothing to apply yet: mid-word, after a trailing dot, or an unknown name.
+  assert.deepEqual(pathActions(tree, [], 'au'), { call: false, descend: false });
+  assert.deepEqual(pathActions(tree, [], ''), { call: false, descend: false });
+  assert.deepEqual(pathActions(tree, ['auth'], 'nope'), { call: false, descend: false });
+});
+
+test('define is only offered at the start of a line', () => {
+  assert.equal(startsLine('$->define.', 0), true);
+  assert.equal(startsLine('  \t$->define.', 3), true);
+  assert.equal(startsLine('see $->define.', 4), false);
+  assert.equal(startsLine('a line\n$->define.', 7), true);
+});
+
+test('a definition runs to the next rule', () => {
+  const text = ['#### $.screens.Splash', 'The first screen.', '', '---', 'after'].join('\n');
+  const [heading] = definitionHeadings(text);
+  assert.deepEqual(heading.segments, ['screens', 'Splash']);
+  assert.equal(heading.body, 'The first screen.\n\n');
+  assert.equal(text.slice(heading.start, heading.end), '#### $.screens.Splash');
+});
+
+test('a definition runs to the next heading of level 1 to 4', () => {
+  for (const terminator of ['# One', '## Two', '### Three', '#### $.other']) {
+    const text = ['#### $.a', 'body', terminator, 'after'].join('\n');
+    assert.equal(definitionHeadings(text)[0].body, 'body\n', terminator);
+  }
+  // Deeper headings are part of the definition, not the end of it.
+  const text = ['#### $.a', 'body', '##### Five', 'more'].join('\n');
+  assert.equal(definitionHeadings(text)[0].body, 'body\n##### Five\nmore');
+});
+
+test('a definition running to the end of the document drops its last newline', () => {
+  assert.equal(definitionHeadings('#### $.a\nbody\n')[0].body, 'body');
+  assert.equal(definitionHeadings('#### $.a\nbody')[0].body, 'body');
+  assert.equal(definitionHeadings('#### $.a\nbody\n\n')[0].body, 'body\n');
+  assert.equal(definitionHeadings('#### $.a')[0].body, '');
+});
+
+test('a definition is stored on its concept, beside the name', () => {
+  const text = ['$.screens.Splash is a screen.', '', '#### $.screens.Splash', 'The first screen.'].join('\n');
+  assert.deepEqual(buildTree(text), {
+    screens: {
+      '($)': 'screens',
+      Splash: { '($)': 'Splash', '($.def)': 'The first screen.' },
+    },
+  });
+});
+
+test('a definition heading declares its concept on its own', () => {
+  assert.deepEqual(buildTree('#### $.auth.token\nA token.'), {
+    auth: { '($)': 'auth', token: { '($)': 'token', '($.def)': 'A token.' } },
+  });
+});
+
+test('definitions are part of the dump', () => {
+  const json = dumpText(buildTree('#### $.a\nbody'), false);
+  assert.match(json, /"\(\$\.def\)": "body"/);
+});
+
+test('the last definition of a concept wins', () => {
+  const text = ['#### $.a', 'first', '---', '#### $.a', 'second'].join('\n');
+  const tree = buildTree(text) as { a: Record<string, string> };
+  assert.equal(tree.a['($.def)'], 'second');
+});
+
+test('a definition heading is not mistaken for one when it is malformed', () => {
+  assert.deepEqual(definitionHeadings('### $.a\nbody'), []); // three hashes
+  assert.deepEqual(definitionHeadings('##### $.a\nbody'), []); // five
+  assert.deepEqual(definitionHeadings('#### $.a trailing words\nbody'), []);
+  assert.deepEqual(definitionHeadings('#### not-a-concept\nbody'), []);
+});
+
+test('a definition body is not scanned away from the concepts inside it', () => {
+  const tree = buildTree('#### $.a\nSee $.b.c for more.');
+  assert.deepEqual(Object.keys(tree), ['a', 'b']);
+});
+
+test('the define expression itself never becomes a concept', () => {
+  assert.deepEqual(buildTree('$->define.screens.Splash'), {});
 });

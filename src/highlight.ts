@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { conceptSpans } from './concepts';
+import { conceptSpans, definitionHeadings, resolveNode } from './concepts';
+import { ConceptStore } from './store';
 
 /** Bright blue on dark themes. */
 export const DEFAULT_DARK_COLOR = '#05c3f9';
@@ -18,7 +19,10 @@ export class ConceptHighlighter implements vscode.Disposable {
   private decoration: vscode.TextEditorDecorationType;
   private readonly disposables: vscode.Disposable[] = [];
 
-  constructor(private readonly isEnabled: (document: vscode.TextDocument) => boolean) {
+  constructor(
+    private readonly store: ConceptStore,
+    private readonly isEnabled: (document: vscode.TextDocument) => boolean
+  ) {
     this.decoration = createDecoration();
     this.disposables.push(
       vscode.window.onDidChangeVisibleTextEditors(() => this.applyAll()),
@@ -64,13 +68,23 @@ export class ConceptHighlighter implements vscode.Disposable {
       return;
     }
     const text = editor.document.getText();
-    editor.setDecorations(
-      this.decoration,
-      conceptSpans(text).map(
-        (span) =>
-          new vscode.Range(editor.document.positionAt(span.start), editor.document.positionAt(span.end))
-      )
-    );
+    const toRange = (span: { start: number; end: number }) =>
+      new vscode.Range(
+        editor.document.positionAt(span.start),
+        editor.document.positionAt(span.end)
+      );
+
+    const ranges = conceptSpans(text).map(toRange);
+
+    // A `#### $.a.b` line is coloured whole, but only once its concept is real.
+    const tree = this.store.tree(editor.document);
+    for (const heading of definitionHeadings(text)) {
+      if (resolveNode(tree, heading.segments)) {
+        ranges.push(toRange(heading));
+      }
+    }
+
+    editor.setDecorations(this.decoration, ranges);
   }
 
   dispose() {

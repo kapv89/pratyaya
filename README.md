@@ -59,7 +59,7 @@ stays readable on its own.
 | Reached with | What it is |
 | --- | --- |
 | `$.` | **`root`** - the concept tree. Pure data: concepts and nothing else. |
-| `$->` | **functions** - `dump` today. |
+| `$->` | **functions** - `dump` and `define`. |
 
 A function is not a member of `root` and `root` is not a member of the functions.
 Nothing reached through `->` can ever be written into the tree, show up in a dump,
@@ -79,12 +79,57 @@ highlight, nothing in the tree.
 | `$.screens.` | that node's children — `Splash`, `NewUsername` |
 | `$.screens.S` | `Splash` only — filtering is by prefix, case-insensitive |
 | `$.screens.Payments` | nothing to suggest; the new concept is added to the tree |
-| `$->` | the scope's functions - `dump` |
+| `$->` | the scope's functions - `dump`, `define` |
 | `$->dump` | the whole tree, as a formatted JSON block |
 
 Suggestions keep document order rather than sorting alphabetically, so the list
 reads the way the spec does. Branch concepts show a module icon, leaves a field
 icon, and the details pane previews the subtree under the concept.
+
+## Defining concepts
+
+A reference says *where* a concept is used. A definition says *what it is*, in
+the document, next to everything else.
+
+Start one with `$->define.` at the beginning of a line. The walk offers the
+concepts you already have, a level at a time:
+
+| You type | You get |
+| --- | --- |
+| `$->define.` | the top-level concepts |
+| `$->define.au` | concepts starting with `au` |
+| `$->define.auth` | `()` to define `auth`, and `.` because it has children |
+| `$->define.auth.` | the children of `auth` |
+| `$->define.auth.token` | `()` alone - `token` is a leaf |
+
+Choosing `()` ends the walk and rewrites the line as a heading:
+
+```
+#### $.auth.token
+```
+
+Everything under that heading is the definition. It ends at the first line that
+is `---`, or a heading of level one to four - the next definition included - or
+the end of the document, whose final newline is left out. It lands on the concept
+itself, under `($.def)`, beside the name:
+
+```json
+{
+  "auth": {
+    "($)": "auth",
+    "token": { "($)": "token", "($.def)": "The key a signed-in device holds.\n" }
+  }
+}
+```
+
+So definitions travel with the tree: they are in every `$->dump`, in the live
+JSON view, and in a concept's tooltip in the Concepts view. A heading is a
+concept reference like any other, so `#### $.auth.token` also declares the
+concept - you can define something before you first use it. Write two definitions
+for one concept and the last one wins.
+
+Definition headings are coloured whole, in the concept colour, once their path
+resolves in the tree.
 
 ### The invalid state
 

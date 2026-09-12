@@ -13,6 +13,9 @@ export const MARKER = '$';
  */
 export const MARKER_KEY = '($)';
 
+/** The key holding a concept's definition, written under a `####` heading. */
+export const DEF_KEY = '($.def)';
+
 /**
  * The accessor that reaches the scope's functions: `$->dump`.
  *
@@ -23,6 +26,9 @@ export const MARKER_KEY = '($)';
  */
 export const FUNCTION_ACCESSOR = '->';
 
+/** What `$->define` turns its line into. */
+export const DEFINITION_PREFIX = '#### ';
+
 export interface ConceptNode {
   [key: string]: ConceptNode | string;
 }
@@ -32,14 +38,26 @@ export interface RenderOptions {
   asCodeBlock: boolean;
 }
 
+/** A function that walks `root` before acting, like `$->define.screens.Splash`. */
+export interface PathFunction {
+  /** Shown beside the `()` suggestion that ends the walk. */
+  callSummary: string;
+  /** What the line becomes once `()` is accepted. */
+  call(segments: string[]): string;
+}
+
 /** One of the functions sitting beside `root` in the scope. */
 export interface ScopeFunction {
   /** Name as typed after the accessor. */
   name: string;
   /** One line describing it, shown beside the suggestion. */
   summary: string;
-  /** The text that replaces the expression when the suggestion is accepted. */
-  render(root: ConceptNode, options: RenderOptions): string;
+  /** Only offered when its expression is the first thing on the line. */
+  lineStart?: boolean;
+  /** Replaces its own expression with this text, like `dump`. */
+  render?(root: ConceptNode, options: RenderOptions): string;
+  /** Walks `root` and acts on the chosen path, like `define`. */
+  path?: PathFunction;
 }
 
 /**
@@ -51,6 +69,15 @@ export const SCOPE_FUNCTIONS: readonly ScopeFunction[] = [
     name: 'dump',
     summary: 'insert the whole concept tree as formatted JSON',
     render: (root, options) => dumpText(root, options.asCodeBlock),
+  },
+  {
+    name: 'define',
+    summary: 'start a definition for a concept',
+    lineStart: true,
+    path: {
+      callSummary: 'define this concept',
+      call: (segments) => `${DEFINITION_PREFIX}${MARKER}.${segments.join('.')}`,
+    },
   },
 ];
 
@@ -72,10 +99,82 @@ const SEGMENT_RE = /^[A-Za-z0-9_-]*$/;
 const PATH_SCAN_RE = /\$((?:\.[A-Za-z0-9_-]+)+)/g;
 
 /** Every concept expression in a document, for highlighting. */
-const CONCEPT_SCAN_RE = /\$(?:->[A-Za-z0-9_]*|(?:\.[A-Za-z0-9_-]+)+)/g;
+const CONCEPT_SCAN_RE = /\$->[A-Za-z0-9_]*(?:\.[A-Za-z0-9_-]+)*|\$(?:\.[A-Za-z0-9_-]+)+/g;
 
 /** Punctuation that ends prose rather than continuing an expression. */
 const TRAILING_PROSE_RE = /[,;:!?)\]}"'`*]+$/;
+
+/** `#### $.a.b` on a line of its own - the head of a definition. */
+const DEFINITION_HEADING_RE = /^#{4}[ \t]+\$((?:\.[A-Za-z0-9_-]+)+)[ \t]*$/;
+
+/** A line that closes a definition: a rule, or a heading of level 1 to 4. */
+const DEFINITION_END_RE = /^(?:---[ \t]*|#{1,4}(?!#))/;
+
+/** Is everything before `offset` on its line blank? */
+export function startsLine(text: string, offset: number): boolean {
+  const lineStart = text.lastIndexOf('\n', offset - 1) + 1;
+  return text.slice(lineStart, offset).trim() === '';
+}
+
+/** A `#### $.a.b` heading and the definition body that follows it. */
+export interface DefinitionHeading {
+  /** Offsets of the heading line itself, for highlighting. */
+  start: number;
+  end: number;
+  segments: string[];
+  /** Everything up to the next rule, heading, or the end of the document. */
+  body: string;
+}
+
+/**
+ * Finds every definition in a document.
+ *
+ * A definition runs from the line after its heading until a line that is just
+ * `---`, or a heading of level 1 to 4 (the next definition included), or the end
+ * of the document - in which case the final newline is dropped, since it belongs
+ * to the document rather than to the definition.
+ */
+export function definitionHeadings(text: string): DefinitionHeading[] {
+  const lines: { text: string; start: number }[] = [];
+  let offset = 0;
+  for (const line of text.split('\n')) {
+    lines.push({ text: line.replace(/\r$/, ''), start: offset });
+    offset += line.length + 1;
+  }
+
+  const headings: DefinitionHeading[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const match = DEFINITION_HEADING_RE.exec(lines[i].text);
+    if (!match) {
+      continue;
+    }
+
+    const bodyStart = i + 1 < lines.length ? lines[i + 1].start : text.length;
+    let end = text.length;
+    let atEof = true;
+    for (let j = i + 1; j < lines.length; j++) {
+      if (DEFINITION_END_RE.test(lines[j].text)) {
+        end = lines[j].start;
+        atEof = false;
+        break;
+      }
+    }
+
+    let body = text.slice(bodyStart, end);
+    if (atEof) {
+      body = body.replace(/\r?\n$/, '');
+    }
+
+    headings.push({
+      start: lines[i].start,
+      end: lines[i].start + lines[i].text.length,
+      segments: match[1].slice(1).split('.'),
+      body,
+    });
+  }
+
+  return headings;
+}
 
 /**
  * Builds the `root` object from the document text. The tree is always derived
@@ -83,20 +182,34 @@ const TRAILING_PROSE_RE = /[,;:!?)\]}"'`*]+$/;
  * directions - typing a new path grows it, deleting one shrinks it.
  */
 export function buildTree(text: string): ConceptNode {
+  // Collected first so a node can carry its definition from the moment it is
+  // created, which keeps `($.def)` next to `($)` in a dump.
+  const definitions = new Map<string, string>();
+  for (const heading of definitionHeadings(text)) {
+    definitions.set(heading.segments.join('.'), heading.body);
+  }
+
   const root: ConceptNode = {};
 
   for (const match of text.matchAll(PATH_SCAN_RE)) {
-    const path = match[1];
+    const segments = match[1].slice(1).split('.');
     let node = root;
-    for (const segment of path.slice(1).split('.')) {
+    const walked: string[] = [];
+
+    for (const segment of segments) {
+      walked.push(segment);
       const existing = node[segment];
       if (existing && typeof existing === 'object') {
         node = existing;
-      } else {
-        const child: ConceptNode = { [MARKER_KEY]: segment };
-        node[segment] = child;
-        node = child;
+        continue;
       }
+      const child: ConceptNode = { [MARKER_KEY]: segment };
+      const definition = definitions.get(walked.join('.'));
+      if (definition !== undefined) {
+        child[DEF_KEY] = definition;
+      }
+      node[segment] = child;
+      node = child;
     }
   }
 
@@ -118,7 +231,13 @@ export function resolveNode(root: ConceptNode, segments: string[]): ConceptNode 
 
 /** Child concept names of a node, in the order they appear in the document. */
 export function childKeys(node: ConceptNode): string[] {
-  return Object.keys(node).filter((key) => key !== MARKER_KEY && typeof node[key] === 'object');
+  return Object.keys(node).filter((key) => typeof node[key] === 'object');
+}
+
+/** A concept's definition, if one was written for it. */
+export function definitionOf(node: ConceptNode): string | undefined {
+  const definition = node[DEF_KEY];
+  return typeof definition === 'string' ? definition : undefined;
 }
 
 /** Number of concepts below a node, recursively. */
@@ -137,9 +256,9 @@ export interface ConceptSpan {
 
 /**
  * Locates the concept expressions in a document: a `$` with its dotted path, or
- * with the `->` function accessor. A span stops where the expression stops, so prose
- * or punctuation written straight after it is left uncoloured, and a lone `$` -
- * a price, a shell prompt, some maths - is not a concept at all.
+ * with the `->` function accessor. A span stops where the expression stops, so
+ * prose or punctuation written straight after it is left uncoloured, and a lone
+ * `$` - a price, a shell prompt, some maths - is not a concept at all.
  */
 export function conceptSpans(text: string): ConceptSpan[] {
   return [...text.matchAll(CONCEPT_SCAN_RE)].map((match) => ({
@@ -159,7 +278,15 @@ export type Context =
    */
   | { kind: 'path'; exprStart: number; segments: string[]; partial: string }
   /** Cursor is inside `$->…`; `partial` is the function name being typed. */
-  | { kind: 'function'; exprStart: number; partial: string };
+  | { kind: 'function'; exprStart: number; partial: string }
+  /** Cursor is inside a path function's walk, like `$->define.screens.Sp`. */
+  | {
+      kind: 'functionPath';
+      exprStart: number;
+      name: string;
+      segments: string[];
+      partial: string;
+    };
 
 /**
  * Classifies the text immediately before `offset`.
@@ -193,7 +320,7 @@ export function parseContextAt(text: string, offset: number): Context {
 
   // `$.a.b,` - the expression closed and prose carried on.
   const trimmed = tail.replace(TRAILING_PROSE_RE, '');
-  if (trimmed !== tail && isValidPathTail(trimmed)) {
+  if (trimmed !== tail && isCompleteTail(trimmed)) {
     return { kind: 'none' };
   }
 
@@ -204,35 +331,57 @@ export function parseContextAt(text: string, offset: number): Context {
     if (!tail.startsWith(FUNCTION_ACCESSOR)) {
       return { kind: 'none' }; // a stray hyphen, not the function accessor
     }
-    const partial = tail.slice(FUNCTION_ACCESSOR.length);
-    return SEGMENT_RE.test(partial)
-      ? { kind: 'function', exprStart, partial }
+
+    const rest = tail.slice(FUNCTION_ACCESSOR.length);
+    const dot = rest.indexOf('.');
+    if (dot === -1) {
+      return SEGMENT_RE.test(rest)
+        ? { kind: 'function', exprStart, partial: rest }
+        : { kind: 'invalid', exprStart, tail };
+    }
+
+    const name = rest.slice(0, dot);
+    if (!scopeFunction(name)?.path) {
+      return { kind: 'invalid', exprStart, tail }; // only path functions take one
+    }
+    const parts = splitPath(rest.slice(dot + 1));
+    return parts
+      ? { kind: 'functionPath', exprStart, name, segments: parts.slice(0, -1), partial: parts[parts.length - 1] }
       : { kind: 'invalid', exprStart, tail };
   }
 
-  {
-    const parts = tail.slice(1).split('.');
-    for (let i = 0; i < parts.length; i++) {
-      const isLast = i === parts.length - 1;
-      if (!SEGMENT_RE.test(parts[i]) || (parts[i] === '' && !isLast)) {
-        return { kind: 'invalid', exprStart, tail };
-      }
-    }
-    return { kind: 'path', exprStart, segments: parts.slice(0, -1), partial: parts[parts.length - 1] };
-  }
+  const parts = splitPath(tail.slice(1));
+  return parts
+    ? { kind: 'path', exprStart, segments: parts.slice(0, -1), partial: parts[parts.length - 1] }
+    : { kind: 'invalid', exprStart, tail };
 }
 
-function isValidPathTail(tail: string): boolean {
+/** Splits a dotted path, or returns undefined if any segment is malformed. */
+function splitPath(path: string): string[] | undefined {
+  const parts = path.split('.');
+  for (let i = 0; i < parts.length; i++) {
+    const isLast = i === parts.length - 1;
+    if (!SEGMENT_RE.test(parts[i]) || (parts[i] === '' && !isLast)) {
+      return undefined;
+    }
+  }
+  return parts;
+}
+
+/** Is this a finished expression, so what follows it is prose? */
+function isCompleteTail(tail: string): boolean {
   if (tail === '') {
     return true;
+  }
+  if (tail.startsWith(FUNCTION_ACCESSOR)) {
+    const [name, ...path] = tail.slice(FUNCTION_ACCESSOR.length).split('.');
+    return SEGMENT_RE.test(name) && path.every((part) => part !== '' && SEGMENT_RE.test(part));
   }
   if (!tail.startsWith('.')) {
     return false;
   }
-  return tail
-    .slice(1)
-    .split('.')
-    .every((part, i, parts) => SEGMENT_RE.test(part) && (part !== '' || i === parts.length - 1));
+  const parts = splitPath(tail.slice(1));
+  return parts !== undefined;
 }
 
 /**
@@ -249,6 +398,30 @@ export function suggestionsFor(root: ConceptNode, segments: string[], partial: s
   return childKeys(node).filter(
     (key) => key !== partial && key.toLowerCase().startsWith(prefix)
   );
+}
+
+/** What a path function offers once the walk has landed on something real. */
+export interface PathActions {
+  /** The `()` that ends the walk and applies the function. */
+  call: boolean;
+  /** The `.` that goes a level deeper. */
+  descend: boolean;
+}
+
+/**
+ * `()` appears as soon as the walk names an existing concept, and `.` joins it
+ * when that concept has children. Mid-word or after a trailing dot there is
+ * nothing to apply yet, so neither is offered.
+ */
+export function pathActions(root: ConceptNode, segments: string[], partial: string): PathActions {
+  if (partial === '') {
+    return { call: false, descend: false };
+  }
+  const node = resolveNode(root, [...segments, partial]);
+  if (!node) {
+    return { call: false, descend: false };
+  }
+  return { call: true, descend: childKeys(node).length > 0 };
 }
 
 /** The whole `root` object as formatted JSON. */

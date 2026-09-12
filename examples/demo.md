@@ -20,3 +20,14 @@ Now type each of these on the empty lines below, and watch the suggestions:
 
 
 
+
+Definitions: put the cursor on the empty line below, type `$->define.` and walk.
+
+
+
+#### $.screens.Splash
+
+The first screen the app shows. Checks for a $.components.PrivateKey and sends
+the user to $.screens.Login or the dashboard.
+
+---

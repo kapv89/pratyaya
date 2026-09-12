@@ -23,9 +23,13 @@ async function openMarkdown(content: string): Promise<vscode.TextEditor> {
   return editor;
 }
 
-async function acceptSuggestion(): Promise<void> {
+async function acceptSuggestion(nth = 0): Promise<void> {
   await vscode.commands.executeCommand('editor.action.triggerSuggest');
   await delay(700);
+  for (let i = 0; i < nth; i++) {
+    await vscode.commands.executeCommand('selectNextSuggestion');
+    await delay(120);
+  }
   await vscode.commands.executeCommand('acceptSelectedSuggestion');
   await delay(300);
 }
@@ -67,5 +71,51 @@ suite('the suggest widget', () => {
     await acceptSuggestion();
 
     assert.match(editor.document.getText(), /\$\.screens\.Splash$/);
+  });
+
+  test('$->define walks to a concept, and () rewrites the line', async () => {
+    const editor = await openMarkdown('$.screens.Splash\n\n$->define.screens');
+
+    await acceptSuggestion();
+
+    assert.match(editor.document.getText(), /\n#### \$\.screens$/);
+  });
+
+  test('the second choice is the . that walks a level deeper', async () => {
+    const editor = await openMarkdown('$.screens.Splash\n\n$->define.screens');
+
+    await acceptSuggestion(1);
+
+    const text = editor.document.getText();
+    assert.ok(text.endsWith('$->define.screens.'), `walk did not descend, got:\n${text}`);
+    assert.ok(!text.includes('####'), 'the line should not have been rewritten');
+  });
+
+  test('define is not offered part way through a line', async () => {
+    const editor = await openMarkdown('$.screens.Splash\n\nsee $->define.screens');
+
+    await acceptSuggestion();
+
+    assert.ok(!editor.document.getText().includes('####'), 'define must need the line start');
+  });
+
+  test('a definition under a heading reaches the tree', async () => {
+    const editor = await openMarkdown(
+      [
+        '$.screens.Splash',
+        '',
+        '#### $.screens.Splash',
+        'The first screen.',
+        '',
+        '---',
+        '',
+        '$->dump',
+      ].join('\n')
+    );
+
+    await acceptSuggestion();
+
+    const text = editor.document.getText();
+    assert.match(text, /"\(\$\.def\)": "The first screen\.\\n\\n"/);
   });
 });

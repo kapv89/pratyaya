@@ -6,8 +6,10 @@ import {
   parseContextAt,
   resolveNode,
   suggestionsFor,
+  pathActions,
   scopeFunction,
   scopeFunctionsMatching,
+  startsLine,
   ConceptNode,
   ScopeFunction,
   FUNCTION_ACCESSOR,
@@ -37,7 +39,7 @@ function dumpAsCodeBlock(): boolean {
 
 export function activate(context: vscode.ExtensionContext) {
   const store = new ConceptStore(isEnabled);
-  const highlighter = new ConceptHighlighter(isEnabled);
+  const highlighter = new ConceptHighlighter(store, isEnabled);
   const liveDocuments = new LiveTreeDocumentProvider(store);
   const conceptTree = new ConceptTreeProvider(store, isEnabled);
 
@@ -121,11 +123,24 @@ class ConceptCompletionProvider implements vscode.CompletionItemProvider {
     const root = this.store.tree(document);
     const exprRange = new vscode.Range(document.positionAt(context.exprStart), position);
 
+    const atLineStart = startsLine(text, context.exprStart);
+
     if (context.kind === 'function') {
-      const items = scopeFunctionsMatching(context.partial).map((fn) =>
-        functionItem(fn, root, exprRange)
-      );
+      const items = scopeFunctionsMatching(context.partial)
+        .filter((fn) => !fn.lineStart || atLineStart)
+        .map((fn) => functionItem(fn, root, exprRange));
       return new vscode.CompletionList(items, true);
+    }
+
+    if (context.kind === 'functionPath') {
+      const fn = scopeFunction(context.name);
+      if (!fn?.path || (fn.lineStart && !atLineStart)) {
+        return new vscode.CompletionList([], true);
+      }
+      return new vscode.CompletionList(
+        walkItems(fn, root, context.segments, context.partial, document, position),
+        true
+      );
     }
 
     const { segments, partial } = context;
@@ -147,7 +162,8 @@ function conceptItem(
   segments: string[],
   key: string,
   index: number,
-  replaceRange: vscode.Range
+  replaceRange: vscode.Range,
+  retrigger = false
 ): vscode.CompletionItem {
   const node = resolveNode(root, [...segments, key])!;
   const children = childKeys(node);
@@ -161,7 +177,11 @@ function conceptItem(
   item.range = replaceRange;
   item.filterText = key;
   // Preserve document order rather than letting the widget sort alphabetically.
-  item.sortText = index.toString().padStart(4, '0');
+  item.sortText = `2${index.toString().padStart(4, '0')}`;
+  if (retrigger) {
+    // Mid-walk, so open the next set of choices straight away.
+    item.command = { command: 'editor.action.triggerSuggest', title: 'Keep walking' };
+  }
 
   const documentation = new vscode.MarkdownString();
   documentation.appendMarkdown(
@@ -171,6 +191,65 @@ function conceptItem(
   );
   documentation.appendCodeblock(dumpJson(node), 'json');
   item.documentation = documentation;
+
+  return item;
+}
+
+/** Suggestions while walking a path function: concepts, then `()` and `.`. */
+function walkItems(
+  fn: ScopeFunction,
+  root: ConceptNode,
+  segments: string[],
+  partial: string,
+  document: vscode.TextDocument,
+  position: vscode.Position
+): vscode.CompletionItem[] {
+  const replaceRange = new vscode.Range(position.translate(0, -partial.length), position);
+  const items = suggestionsFor(root, segments, partial).map((key, index) =>
+    conceptItem(root, segments, key, index, replaceRange, true)
+  );
+
+  const actions = pathActions(root, segments, partial);
+  if (actions.call) {
+    items.push(callItem(fn, [...segments, partial], document, position));
+  }
+  if (actions.descend) {
+    items.push(descendItem(position));
+  }
+
+  return items;
+}
+
+/** The `()` that ends the walk and rewrites the line. */
+function callItem(
+  fn: ScopeFunction,
+  segments: string[],
+  document: vscode.TextDocument,
+  position: vscode.Position
+): vscode.CompletionItem {
+  const line = document.lineAt(position.line);
+  const item = new vscode.CompletionItem('()', vscode.CompletionItemKind.Method);
+
+  item.detail = `${fn.path!.call(segments)} - ${fn.path!.callSummary}`;
+  item.insertText = fn.path!.call(segments);
+  // The whole line goes, so VS Code filters against everything typed on it.
+  item.range = new vscode.Range(position.line, 0, position.line, line.text.length);
+  item.filterText = line.text.slice(0, position.character);
+  item.sortText = '0';
+  item.preselect = true;
+
+  return item;
+}
+
+/** The `.` that walks one level deeper. */
+function descendItem(position: vscode.Position): vscode.CompletionItem {
+  const item = new vscode.CompletionItem('.', vscode.CompletionItemKind.Operator);
+
+  item.detail = 'go a level deeper';
+  item.insertText = '.';
+  item.range = new vscode.Range(position, position);
+  item.sortText = '1';
+  item.command = { command: 'editor.action.triggerSuggest', title: 'Show the children' };
 
   return item;
 }
@@ -190,15 +269,22 @@ function functionItem(
   item.filterText = expression;
   item.sortText = fn.name;
 
-  // Accepting clears the expression and lets the command render the replacement,
-  // so the text is built when it is inserted rather than when the list was made.
-  item.insertText = '';
   item.range = exprRange;
-  item.command = {
-    command: 'pratyaya.runFunction',
-    title: fn.summary,
-    arguments: [fn.name],
-  };
+
+  if (fn.path) {
+    // Accepting opens the walk: `$->define.`, then the concepts appear.
+    item.insertText = `${expression}.`;
+    item.command = { command: 'editor.action.triggerSuggest', title: 'Choose a concept' };
+  } else {
+    // Accepting clears the expression and lets the command render the replacement,
+    // so the text is built when it is inserted rather than when the list was made.
+    item.insertText = '';
+    item.command = {
+      command: 'pratyaya.runFunction',
+      title: fn.summary,
+      arguments: [fn.name],
+    };
+  }
 
   const documentation = new vscode.MarkdownString();
   documentation.appendMarkdown(
@@ -234,7 +320,7 @@ function invalidItem(position: vscode.Position): vscode.CompletionItem {
 async function runFunction(store: ConceptStore, name: string) {
   const editor = vscode.window.activeTextEditor;
   const fn = scopeFunction(name);
-  if (!editor || !fn) {
+  if (!editor || !fn?.render) {
     return;
   }
   const text = fn.render(store.tree(editor.document), { asCodeBlock: dumpAsCodeBlock() });
