@@ -131,6 +131,28 @@ real VS Code instance against a buffer that is never saved, so it pins down the
 behaviour that matters most: suggestions, the live view and the dump all reflect
 text typed a moment ago, with no save in between.
 
+## Releasing
+
+Tagging a version publishes it. `.github/workflows/release.yml` runs both test
+suites, packages the extension, pushes it to the VS Code Marketplace and Open VSX,
+and attaches the `.vsix` to a GitHub release:
+
+```bash
+npm version patch      # or minor / major - commits and tags
+git push --follow-tags
+```
+
+The tag must match `package.json`; the workflow checks and fails early if it does
+not. It needs two repository secrets, under Settings - Secrets and variables -
+Actions:
+
+| Secret | Where it comes from | Required |
+| --- | --- | --- |
+| `VSCE_PAT` | Azure DevOps personal access token, scope Marketplace - Manage, organization "All accessible organizations" | yes |
+| `OVSX_PAT` | Open VSX access token from open-vsx.org | no - the step is skipped without it |
+
+`.github/workflows/ci.yml` runs the same suites on every push and pull request.
+
 ## License
 
 MIT

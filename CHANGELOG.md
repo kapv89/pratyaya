@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.2
+
+- Added an extension icon and a gallery banner for the Marketplace listing.
+- Added CI on every push, and a release workflow that publishes to both the
+  VS Code Marketplace and Open VSX when a version tag is pushed.
+
 ## 0.4.1
 
 - Fixed `$->dump` never appearing in the suggestion widget. The item replaces the
