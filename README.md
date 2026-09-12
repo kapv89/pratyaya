@@ -102,6 +102,10 @@ concepts you already have, a level at a time:
 | `$->define.auth.` | the children of `auth` |
 | `$->define.auth.token` | `()` alone - `token` is a leaf |
 
+The walk only offers what is still undefined. A concept that already has a
+definition - even an empty one - is left out, unless something beneath it has
+none yet. Then it stays, so you can walk through it, but without `()`.
+
 Choosing `()` ends the walk and rewrites the line as a heading:
 
 ```

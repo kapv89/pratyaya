@@ -44,6 +44,12 @@ export interface PathFunction {
   callSummary: string;
   /** What the line becomes once `()` is accepted. */
   call(segments: string[]): string;
+  /**
+   * Whether the function can act on this concept itself. Defaults to yes. A
+   * concept it cannot act on is still walked through when something beneath it
+   * can be.
+   */
+  accepts?(node: ConceptNode): boolean;
 }
 
 /** One of the functions sitting beside `root` in the scope. */
@@ -77,6 +83,8 @@ export const SCOPE_FUNCTIONS: readonly ScopeFunction[] = [
     path: {
       callSummary: 'define this concept',
       call: (segments) => `${DEFINITION_PREFIX}${MARKER}.${segments.join('.')}`,
+      // A concept with a definition, even an empty one, has nothing left to define.
+      accepts: (node) => definitionOf(node) === undefined,
     },
   },
 ];
@@ -409,12 +417,44 @@ export interface PathActions {
   descend: boolean;
 }
 
+/** Can the function act on this concept, or on anything beneath it? */
+function reaches(fn: PathFunction, node: ConceptNode): boolean {
+  if (fn.accepts?.(node) ?? true) {
+    return true;
+  }
+  return childKeys(node).some((key) => reaches(fn, node[key] as ConceptNode));
+}
+
 /**
- * `()` appears as soon as the walk names an existing concept, and `.` joins it
- * when that concept has children. Mid-word or after a trailing dot there is
- * nothing to apply yet, so neither is offered.
+ * Concepts to suggest during a walk: the usual prefix-filtered children, minus
+ * any the function has nothing to do with, at that concept or below it.
  */
-export function pathActions(root: ConceptNode, segments: string[], partial: string): PathActions {
+export function walkSuggestions(
+  fn: PathFunction,
+  root: ConceptNode,
+  segments: string[],
+  partial: string
+): string[] {
+  const parent = resolveNode(root, segments);
+  if (!parent) {
+    return [];
+  }
+  return suggestionsFor(root, segments, partial).filter((key) =>
+    reaches(fn, parent[key] as ConceptNode)
+  );
+}
+
+/**
+ * `()` appears once the walk names a concept the function accepts, and `.` when
+ * something beneath that concept is still reachable. Mid-word or after a
+ * trailing dot there is nothing to apply yet, so neither is offered.
+ */
+export function pathActions(
+  fn: PathFunction,
+  root: ConceptNode,
+  segments: string[],
+  partial: string
+): PathActions {
   if (partial === '') {
     return { call: false, descend: false };
   }
@@ -422,7 +462,10 @@ export function pathActions(root: ConceptNode, segments: string[], partial: stri
   if (!node) {
     return { call: false, descend: false };
   }
-  return { call: true, descend: childKeys(node).length > 0 };
+  return {
+    call: fn.accepts?.(node) ?? true,
+    descend: childKeys(node).some((key) => reaches(fn, node[key] as ConceptNode)),
+  };
 }
 
 /** The whole `root` object as formatted JSON. */

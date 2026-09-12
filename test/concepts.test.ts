@@ -7,11 +7,15 @@ import {
   dumpText,
   parseContextAt,
   pathActions,
+  scopeFunction,
   scopeFunctionsMatching,
   startsLine,
   suggestionsFor,
+  walkSuggestions,
   Context,
 } from '../src/concepts';
+
+const define = scopeFunction('define')!.path!;
 
 /** Context at the end of `text`, which is where a typing user's cursor is. */
 function contextAtEnd(text: string): Context {
@@ -267,30 +271,30 @@ test('the walk suggests concepts at each level', () => {
   const atRoot = contextAtEnd(doc + '$->define.');
   assert.equal(atRoot.kind, 'functionPath');
   if (atRoot.kind !== 'functionPath') throw new Error('unreachable');
-  assert.deepEqual(suggestionsFor(tree, atRoot.segments, atRoot.partial), ['auth', 'screens']);
+  assert.deepEqual(walkSuggestions(define, tree, atRoot.segments, atRoot.partial), ['auth', 'screens']);
 
   const typing = contextAtEnd(doc + '$->define.s');
   assert.equal(typing.kind, 'functionPath');
   if (typing.kind !== 'functionPath') throw new Error('unreachable');
-  assert.deepEqual(suggestionsFor(tree, typing.segments, typing.partial), ['screens']);
+  assert.deepEqual(walkSuggestions(define, tree, typing.segments, typing.partial), ['screens']);
 
   const nested = contextAtEnd(doc + '$->define.auth.');
   assert.equal(nested.kind, 'functionPath');
   if (nested.kind !== 'functionPath') throw new Error('unreachable');
-  assert.deepEqual(suggestionsFor(tree, nested.segments, nested.partial), ['token', 'web']);
+  assert.deepEqual(walkSuggestions(define, tree, nested.segments, nested.partial), ['token', 'web']);
 });
 
 test('() appears on a real concept, and . only when it has children', () => {
   const tree = buildTree('$.auth.token $.screens');
 
-  assert.deepEqual(pathActions(tree, [], 'auth'), { call: true, descend: true });
-  assert.deepEqual(pathActions(tree, [], 'screens'), { call: true, descend: false });
-  assert.deepEqual(pathActions(tree, ['auth'], 'token'), { call: true, descend: false });
+  assert.deepEqual(pathActions(define, tree, [], 'auth'), { call: true, descend: true });
+  assert.deepEqual(pathActions(define, tree, [], 'screens'), { call: true, descend: false });
+  assert.deepEqual(pathActions(define, tree, ['auth'], 'token'), { call: true, descend: false });
 
   // Nothing to apply yet: mid-word, after a trailing dot, or an unknown name.
-  assert.deepEqual(pathActions(tree, [], 'au'), { call: false, descend: false });
-  assert.deepEqual(pathActions(tree, [], ''), { call: false, descend: false });
-  assert.deepEqual(pathActions(tree, ['auth'], 'nope'), { call: false, descend: false });
+  assert.deepEqual(pathActions(define, tree, [], 'au'), { call: false, descend: false });
+  assert.deepEqual(pathActions(define, tree, [], ''), { call: false, descend: false });
+  assert.deepEqual(pathActions(define, tree, ['auth'], 'nope'), { call: false, descend: false });
 });
 
 test('define is only offered at the start of a line', () => {
@@ -373,4 +377,37 @@ test('a definition body is not scanned away from the concepts inside it', () => 
 
 test('the define expression itself never becomes a concept', () => {
   assert.deepEqual(buildTree('$->define.screens.Splash'), {});
+});
+
+test('the walk leaves out a concept that is already defined', () => {
+  const tree = buildTree(
+    ['$.screens.Splash $.screens.Login', '', '#### $.screens.Splash', 'Defined.', '---'].join('\n')
+  );
+  assert.deepEqual(walkSuggestions(define, tree, ['screens'], ''), ['Login']);
+  assert.deepEqual(pathActions(define, tree, ['screens'], 'Splash'), { call: false, descend: false });
+});
+
+test('a defined concept stays walkable while something beneath it is not', () => {
+  const tree = buildTree(['$.auth.token', '', '#### $.auth', 'Defined.', '---'].join('\n'));
+  assert.deepEqual(walkSuggestions(define, tree, [], ''), ['auth']);
+  assert.deepEqual(pathActions(define, tree, [], 'auth'), { call: false, descend: true });
+  assert.deepEqual(walkSuggestions(define, tree, ['auth'], ''), ['token']);
+});
+
+test('a fully defined branch drops out of the walk', () => {
+  const tree = buildTree(['#### $.auth', 'A.', '---', '#### $.auth.token', 'T.', '---'].join('\n'));
+  assert.deepEqual(walkSuggestions(define, tree, [], ''), []);
+  assert.deepEqual(pathActions(define, tree, [], 'auth'), { call: false, descend: false });
+});
+
+test('an empty definition still counts as defined', () => {
+  const tree = buildTree(['#### $.a', '---', '$.b'].join('\n'));
+  assert.deepEqual(walkSuggestions(define, tree, [], ''), ['b']);
+});
+
+test('ordinary $. completion still offers defined concepts', () => {
+  const tree = buildTree(
+    ['$.screens.Splash $.screens.Login', '', '#### $.screens.Splash', 'Defined.', '---'].join('\n')
+  );
+  assert.deepEqual(suggestionsFor(tree, ['screens'], ''), ['Splash', 'Login']);
 });

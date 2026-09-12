@@ -7,6 +7,7 @@ import {
   resolveNode,
   suggestionsFor,
   pathActions,
+  walkSuggestions,
   scopeFunction,
   scopeFunctionsMatching,
   startsLine,
@@ -205,11 +206,11 @@ function walkItems(
   position: vscode.Position
 ): vscode.CompletionItem[] {
   const replaceRange = new vscode.Range(position.translate(0, -partial.length), position);
-  const items = suggestionsFor(root, segments, partial).map((key, index) =>
+  const items = walkSuggestions(fn.path!, root, segments, partial).map((key, index) =>
     conceptItem(root, segments, key, index, replaceRange, true)
   );
 
-  const actions = pathActions(root, segments, partial);
+  const actions = pathActions(fn.path!, root, segments, partial);
   if (actions.call) {
     items.push(callItem(fn, [...segments, partial], document, position));
   }

@@ -118,4 +118,24 @@ suite('the suggest widget', () => {
     const text = editor.document.getText();
     assert.match(text, /"\(\$\.def\)": "The first screen\.\\n\\n"/);
   });
+
+  test('the walk leaves out concepts that are already defined', async () => {
+    const editor = await openMarkdown(
+      [
+        '$.screens.Splash $.screens.Login',
+        '',
+        '#### $.screens.Splash',
+        'Already defined.',
+        '',
+        '---',
+        '',
+        '$->define.screens.',
+      ].join('\n')
+    );
+
+    await acceptSuggestion();
+
+    const text = editor.document.getText();
+    assert.ok(text.endsWith('$->define.screens.Login'), `expected Login, got:\n${text}`);
+  });
 });

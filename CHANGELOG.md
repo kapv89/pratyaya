@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.0
+
+- The `$->define` walk only offers concepts that still need a definition. A
+  defined concept stays in the walk only while something beneath it is
+  undefined, and then without `()`, so its children remain reachable.
+- An empty definition counts as a definition, so a heading you have just created
+  is not offered again.
+- Ordinary `$.` completion is unchanged and still offers every concept.
+
 ## 1.0.0
 
 First stable release. Rolls up everything since 0.4.2, the last version on the
