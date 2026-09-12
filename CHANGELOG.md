@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.2.0
+
+- Built for large specs. On a 50,000-word document, typing costs the same with
+  Pratyaya as without it - with the sidebar and live view open or closed - and
+  completion typically answers within a millisecond or two. There is headroom to
+  100,000 words.
+- Nothing is recomputed while you type. The document is analysed once typing
+  pauses, and colours and views update only when what they show has changed,
+  which for ordinary prose outside a definition is never. Completion still reads
+  the text exactly as it is at that moment.
+- Colours no longer stretch over text typed straight after a reference.
+- Suggestion details and sidebar tooltips are built only when shown, and long
+  previews are cut short instead of rendering a whole subtree.
+- `npm run bench` and `npm run bench:editor` measure the core and a real editor
+  on a generated spec; `PRATYAYA_BENCH_WORDS` sets its size.
+
 ## 1.1.0
 
 - The `$->define` walk only offers concepts that still need a definition. A

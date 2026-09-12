@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import { conceptSpans, definitionHeadings, resolveNode } from './concepts';
 import { ConceptStore } from './store';
 
 /** Bright blue on dark themes. */
@@ -9,11 +8,17 @@ export const DEFAULT_DARK_COLOR = '#05c3f9';
 export const DEFAULT_LIGHT_COLOR = '#800c0c';
 
 /**
- * Colours every `($)` concept expression in the open editors.
+ * Colours every `$` concept expression, and every definition heading, in the open
+ * editors.
  *
  * This runs as an editor decoration rather than a TextMate grammar so the colours
- * can come from settings and change without a reload, and so the highlight tracks
- * the text as it is typed.
+ * can come from settings and change without a reload.
+ *
+ * It does no work while you type. VS Code carries existing decorations along
+ * with the text, so colours stay in place as prose around them is edited; they
+ * only need recomputing when an expression or heading itself changes, which the
+ * store reports once typing pauses. Decorations do not stretch at their edges,
+ * so text typed straight after a reference is never coloured in the meantime.
  */
 export class ConceptHighlighter implements vscode.Disposable {
   private decoration: vscode.TextEditorDecorationType;
@@ -26,11 +31,7 @@ export class ConceptHighlighter implements vscode.Disposable {
     this.decoration = createDecoration();
     this.disposables.push(
       vscode.window.onDidChangeVisibleTextEditors(() => this.applyAll()),
-      vscode.workspace.onDidChangeTextDocument((event) => {
-        if (event.contentChanges.length > 0) {
-          this.apply(event.document);
-        }
-      }),
+      store.onDidChangeSpans((document) => this.apply(document)),
       vscode.workspace.onDidChangeConfiguration((event) => {
         if (
           event.affectsConfiguration('pratyaya.conceptColor') ||
@@ -63,28 +64,18 @@ export class ConceptHighlighter implements vscode.Disposable {
   }
 
   private decorate(editor: vscode.TextEditor) {
-    if (!this.isEnabled(editor.document) || !highlightingEnabled()) {
+    const document = editor.document;
+    if (!this.isEnabled(document) || !highlightingEnabled()) {
       editor.setDecorations(this.decoration, []);
       return;
     }
-    const text = editor.document.getText();
-    const toRange = (span: { start: number; end: number }) =>
-      new vscode.Range(
-        editor.document.positionAt(span.start),
-        editor.document.positionAt(span.end)
-      );
 
-    const ranges = conceptSpans(text).map(toRange);
+    const { spans, headingSpans } = this.store.analysis(document);
+    const toRange = (span: { start: number; end: number }) =>
+      new vscode.Range(document.positionAt(span.start), document.positionAt(span.end));
 
     // A `#### $.a.b` line is coloured whole, but only once its concept is real.
-    const tree = this.store.tree(editor.document);
-    for (const heading of definitionHeadings(text)) {
-      if (resolveNode(tree, heading.segments)) {
-        ranges.push(toRange(heading));
-      }
-    }
-
-    editor.setDecorations(this.decoration, ranges);
+    editor.setDecorations(this.decoration, [...spans, ...headingSpans].map(toRange));
   }
 
   dispose() {
@@ -105,6 +96,7 @@ function createDecoration(): vscode.TextEditorDecorationType {
     // VS Code picks the branch matching the active theme kind.
     light: { color: configuration.get<string>('conceptColor.light', DEFAULT_LIGHT_COLOR) },
     dark: { color: configuration.get<string>('conceptColor.dark', DEFAULT_DARK_COLOR) },
-    rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
+    // Edges do not stretch over typed text; see the class comment for why.
+    rangeBehavior: vscode.DecorationRangeBehavior.OpenOpen,
   });
 }

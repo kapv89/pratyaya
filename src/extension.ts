@@ -2,8 +2,8 @@ import * as vscode from 'vscode';
 import {
   childKeys,
   countDescendants,
-  dumpJson,
   parseContextAt,
+  previewJson,
   resolveNode,
   suggestionsFor,
   pathActions,
@@ -100,6 +100,11 @@ export function deactivate() {
   // Disposables registered on the extension context handle teardown.
 }
 
+/** A suggestion whose details pane is only built if the suggestion gets focus. */
+class ConceptCompletionItem extends vscode.CompletionItem {
+  preview?: () => vscode.MarkdownString;
+}
+
 class ConceptCompletionProvider implements vscode.CompletionItemProvider {
   constructor(private readonly store: ConceptStore) {}
 
@@ -107,9 +112,10 @@ class ConceptCompletionProvider implements vscode.CompletionItemProvider {
     document: vscode.TextDocument,
     position: vscode.Position
   ): vscode.CompletionList | undefined {
-    const text = document.getText();
-    const offset = document.offsetAt(position);
-    const context = parseContextAt(text, offset);
+    // An expression never crosses a line, so the line is all there is to read -
+    // no copy of the whole document on every keystroke.
+    const text = document.lineAt(position.line).text;
+    const context = parseContextAt(text, position.character);
 
     if (context.kind === 'none') {
       return undefined;
@@ -122,7 +128,7 @@ class ConceptCompletionProvider implements vscode.CompletionItemProvider {
     }
 
     const root = this.store.tree(document);
-    const exprRange = new vscode.Range(document.positionAt(context.exprStart), position);
+    const exprRange = new vscode.Range(position.line, context.exprStart, position.line, position.character);
 
     const atLineStart = startsLine(text, context.exprStart);
 
@@ -156,6 +162,13 @@ class ConceptCompletionProvider implements vscode.CompletionItemProvider {
 
     return new vscode.CompletionList(items, true);
   }
+
+  resolveCompletionItem(item: vscode.CompletionItem): vscode.CompletionItem {
+    if (item instanceof ConceptCompletionItem && item.preview && !item.documentation) {
+      item.documentation = item.preview();
+    }
+    return item;
+  }
 }
 
 function conceptItem(
@@ -168,7 +181,7 @@ function conceptItem(
 ): vscode.CompletionItem {
   const node = resolveNode(root, [...segments, key])!;
   const children = childKeys(node);
-  const item = new vscode.CompletionItem(
+  const item = new ConceptCompletionItem(
     key,
     children.length > 0 ? vscode.CompletionItemKind.Module : vscode.CompletionItemKind.Field
   );
@@ -184,14 +197,16 @@ function conceptItem(
     item.command = { command: 'editor.action.triggerSuggest', title: 'Keep walking' };
   }
 
-  const documentation = new vscode.MarkdownString();
-  documentation.appendMarkdown(
-    children.length > 0
-      ? `**${key}** - ${children.length} child concept${children.length === 1 ? '' : 's'}\n\n`
-      : `**${key}** - leaf concept\n\n`
-  );
-  documentation.appendCodeblock(dumpJson(node), 'json');
-  item.documentation = documentation;
+  item.preview = () => {
+    const documentation = new vscode.MarkdownString();
+    documentation.appendMarkdown(
+      children.length > 0
+        ? `**${key}** - ${children.length} child concept${children.length === 1 ? '' : 's'}\n\n`
+        : `**${key}** - leaf concept\n\n`
+    );
+    documentation.appendCodeblock(previewJson(node), 'json');
+    return documentation;
+  };
 
   return item;
 }
@@ -260,7 +275,7 @@ function functionItem(
   root: ConceptNode,
   exprRange: vscode.Range
 ): vscode.CompletionItem {
-  const item = new vscode.CompletionItem(fn.name, vscode.CompletionItemKind.Function);
+  const item = new ConceptCompletionItem(fn.name, vscode.CompletionItemKind.Function);
 
   const expression = `${MARKER}${FUNCTION_ACCESSOR}${fn.name}`;
   item.detail = `${expression} - ${fn.summary}`;
@@ -287,12 +302,14 @@ function functionItem(
     };
   }
 
-  const documentation = new vscode.MarkdownString();
-  documentation.appendMarkdown(
-    `\`${expression}\` - ${fn.summary} (${countDescendants(root)} concepts).\n\n`
-  );
-  documentation.appendCodeblock(dumpJson(root), 'json');
-  item.documentation = documentation;
+  item.preview = () => {
+    const documentation = new vscode.MarkdownString();
+    documentation.appendMarkdown(
+      `\`${expression}\` - ${fn.summary} (${countDescendants(root)} concepts).\n\n`
+    );
+    documentation.appendCodeblock(previewJson(root), 'json');
+    return documentation;
+  };
 
   return item;
 }

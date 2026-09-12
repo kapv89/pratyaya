@@ -20,11 +20,11 @@ The `$` is a type of an ode to my first commercial programming language - [PHP](
 ## How it works
 
 Every markdown document has a `root` object attached to it, held in memory and
-rebuilt from the document's own text on every content change. It tracks your
-typing keystroke by keystroke - nothing waits for a save - and because it is
-derived rather than stored, it can never drift from what the document says:
-writing a new path grows it, deleting a mention shrinks it, reopening the file
-reconstructs it.
+derived from the document's own text - including what you have not saved yet.
+Completion always reads the text exactly as it is at that moment, and colours and
+views catch up as soon as you pause typing. Because the tree is derived rather
+than stored, it can never drift from what the document says: writing a new path
+grows it, deleting a mention shrinks it, reopening the file reconstructs it.
 
 Writing this in a spec:
 
@@ -178,6 +178,30 @@ have it also open as you type a concept name, add:
 }
 ```
 
+## Performance
+
+Pratyaya is built for large specs. Nothing is recomputed while you type: the
+document is analysed once typing pauses, and colours and views are touched only
+when what they show has actually changed - which, for ordinary prose, it has not.
+
+Measured inside VS Code on a generated, well structured spec - nested headings, a
+concept reference every 25 words or so, definitions throughout (1,921 references
+and 168 definitions at 50,000 words) - on an i7-1360P with VS Code 1.137:
+
+| median / p95 | 50,000 words | 100,000 words |
+| --- | --- | --- |
+| Keystroke, Pratyaya switched off | 0.9 / 7.3 ms | 1.2 / 36.3 ms |
+| Keystroke, Pratyaya on, views closed | 0.5 / 2.7 ms | 0.6 / 6.5 ms |
+| Keystroke, Pratyaya on, sidebar and live view open | 0.6 / 4.3 ms | 0.9 / 4.8 ms |
+| Completion | 0.4-1.5 / 6-12 ms | 0.5-1.1 / 9-18 ms |
+
+With Pratyaya on, typing is no slower than with it off; the differences between
+those rows are run-to-run noise. The slowest completion seen was 71 ms, for the
+first request after an edit to the 100,000-word document.
+
+To reproduce, `npm run bench:editor` runs the same measurements in a fresh VS Code,
+and `PRATYAYA_BENCH_WORDS=100000 npm run bench:editor` changes the document size.
+
 ## Development
 
 ```bash
@@ -185,6 +209,8 @@ npm install
 npm test               # core unit tests (no editor needed)
 npm run test:integration   # drives a real VS Code instance
 npm run test:all
+npm run bench          # core timings on a generated 50,000-word spec
+npm run bench:editor   # the same spec in a real VS Code
 npx vsce package       # builds pratyaya-<version>.vsix
 ```
 
@@ -195,7 +221,8 @@ with no VS Code imports — parsing, tree building, filtering and dumping are al
 unit tested in [`test/concepts.test.ts`](test/concepts.test.ts). The scope's
 functions are a registry in that same file; adding one there is enough for it to
 be offered after `$->` and rendered when accepted.
-[`src/store.ts`](src/store.ts) attaches a live tree to each document,
+[`src/store.ts`](src/store.ts) keeps a live analysis of each document, redone
+only when typing pauses or completion needs it,
 [`src/highlight.ts`](src/highlight.ts) colours the expressions,
 [`src/views.ts`](src/views.ts) draws the sidebar and the live JSON view, and
 [`src/extension.ts`](src/extension.ts) is the editor glue.

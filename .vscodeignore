@@ -10,3 +10,5 @@ examples/**
 **/*.ts
 .vscode-test/**
 .github/**
+bench/**
+out/bench/**

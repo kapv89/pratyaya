@@ -1,73 +1,133 @@
 import * as vscode from 'vscode';
-import { buildTree, ConceptNode } from './concepts';
+import { analyze, Analysis, ConceptNode } from './concepts';
+
+/** How long typing has to pause before colours and views catch up. */
+const PUBLISH_DELAY_MS = 120;
 
 interface Entry {
-  /** Document version the tree was built from. */
+  /** Document version the analysis was made from. */
   version: number;
-  tree: ConceptNode;
+  analysis: Analysis;
+}
+
+/** What listeners were last told about, so unchanged results stay quiet. */
+interface Published {
+  treeKey: string;
+  spanKey: string;
 }
 
 /**
- * Keeps one live `root` object per open document.
+ * Keeps one live analysis per open document: its `root` object, and what to
+ * colour.
  *
- * The tree is rebuilt from the document's in-memory text on every content
- * change, so it tracks typing keystroke by keystroke and never waits for a save.
- * Readers get the cached object, and a version check means a missed change event
- * can never hand out a stale tree.
+ * Nothing is computed while you type. Once typing pauses, the document is
+ * analysed once, and listeners hear about it only if what they show has actually
+ * changed - which, for ordinary prose, it has not. Anything that needs the tree
+ * immediately, like completion, has it computed on the spot from the current
+ * text, so it is never stale either way.
  */
 export class ConceptStore implements vscode.Disposable {
   private readonly entries = new Map<string, Entry>();
-  private readonly changeEmitter = new vscode.EventEmitter<vscode.TextDocument>();
+  private readonly published = new Map<string, Published>();
+  private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly treeEmitter = new vscode.EventEmitter<vscode.TextDocument>();
+  private readonly spanEmitter = new vscode.EventEmitter<vscode.TextDocument>();
   private readonly disposables: vscode.Disposable[] = [];
 
-  /** Fires with the document whose `root` object just changed. */
-  readonly onDidChangeTree = this.changeEmitter.event;
+  /** Fires, once typing pauses, when a document's `root` object has changed. */
+  readonly onDidChangeTree = this.treeEmitter.event;
+
+  /** Fires, once typing pauses, when what should be coloured has changed. */
+  readonly onDidChangeSpans = this.spanEmitter.event;
 
   constructor(private readonly isEnabled: (document: vscode.TextDocument) => boolean) {
     this.disposables.push(
-      this.changeEmitter,
+      this.treeEmitter,
+      this.spanEmitter,
       vscode.workspace.onDidChangeTextDocument((event) => {
         if (event.contentChanges.length > 0 && this.isEnabled(event.document)) {
-          this.rebuild(event.document);
+          this.schedule(event.document);
         }
       }),
       vscode.workspace.onDidOpenTextDocument((document) => {
         if (this.isEnabled(document)) {
-          this.rebuild(document);
+          this.publish(document);
         }
       }),
-      vscode.workspace.onDidCloseTextDocument((document) => {
-        this.entries.delete(document.uri.toString());
-      })
+      vscode.workspace.onDidCloseTextDocument((document) => this.forget(document))
     );
 
     for (const document of vscode.workspace.textDocuments) {
       if (this.isEnabled(document)) {
-        this.rebuild(document);
+        this.publish(document);
       }
     }
   }
 
-  /** The document's live `root` object. */
+  /** The document's `root` object, as of its current text. */
   tree(document: vscode.TextDocument): ConceptNode {
-    const entry = this.entries.get(document.uri.toString());
-    if (entry && entry.version === document.version) {
-      return entry.tree;
-    }
-    return this.rebuild(document);
+    return this.analysis(document).tree;
   }
 
-  private rebuild(document: vscode.TextDocument): ConceptNode {
-    const tree = buildTree(document.getText());
-    this.entries.set(document.uri.toString(), { version: document.version, tree });
-    this.changeEmitter.fire(document);
-    return tree;
+  /** The document's analysis, as of its current text. */
+  analysis(document: vscode.TextDocument): Analysis {
+    const key = document.uri.toString();
+    const entry = this.entries.get(key);
+    if (entry && entry.version === document.version) {
+      return entry.analysis;
+    }
+    const analysis = analyze(document.getText());
+    this.entries.set(key, { version: document.version, analysis });
+    return analysis;
+  }
+
+  /** Brings listeners up to date with the document, if anything changed for them. */
+  private publish(document: vscode.TextDocument) {
+    const key = document.uri.toString();
+    clearTimeout(this.timers.get(key));
+    this.timers.delete(key);
+    if (document.isClosed) {
+      return;
+    }
+
+    const analysis = this.analysis(document);
+    const previous = this.published.get(key);
+    this.published.set(key, { treeKey: analysis.treeKey, spanKey: analysis.spanKey });
+
+    if (previous?.treeKey !== analysis.treeKey) {
+      this.treeEmitter.fire(document);
+    }
+    if (previous?.spanKey !== analysis.spanKey) {
+      this.spanEmitter.fire(document);
+    }
+  }
+
+  private schedule(document: vscode.TextDocument) {
+    const key = document.uri.toString();
+    clearTimeout(this.timers.get(key));
+    this.timers.set(
+      key,
+      setTimeout(() => this.publish(document), PUBLISH_DELAY_MS)
+    );
+  }
+
+  private forget(document: vscode.TextDocument) {
+    const key = document.uri.toString();
+    clearTimeout(this.timers.get(key));
+    this.timers.delete(key);
+    this.entries.delete(key);
+    this.published.delete(key);
   }
 
   dispose() {
+    for (const timer of this.timers.values()) {
+      clearTimeout(timer);
+    }
     for (const disposable of this.disposables) {
       disposable.dispose();
     }
+    this.timers.clear();
     this.entries.clear();
+    this.published.clear();
   }
 }

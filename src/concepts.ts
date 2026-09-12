@@ -191,10 +191,14 @@ export function definitionHeadings(text: string): DefinitionHeading[] {
  * directions - typing a new path grows it, deleting one shrinks it.
  */
 export function buildTree(text: string): ConceptNode {
+  return treeFrom(text, definitionHeadings(text));
+}
+
+function treeFrom(text: string, headings: DefinitionHeading[]): ConceptNode {
   // Collected first so a node can carry its definition from the moment it is
   // created, which keeps `($.def)` next to `($)` in a dump.
   const definitions = new Map<string, string>();
-  for (const heading of definitionHeadings(text)) {
+  for (const heading of headings) {
     definitions.set(heading.segments.join('.'), heading.body);
   }
 
@@ -477,4 +481,73 @@ export function dumpJson(root: ConceptNode): string {
 export function dumpText(root: ConceptNode, asCodeBlock: boolean): string {
   const json = dumpJson(root);
   return asCodeBlock ? '```json\n' + json + '\n```' : json;
+}
+
+/** Everything the editor needs from a document, from a single pass over it. */
+export interface Analysis {
+  tree: ConceptNode;
+  /** Concept expressions, to colour. */
+  spans: ConceptSpan[];
+  /** Definition heading lines whose concept resolves, coloured whole. */
+  headingSpans: ConceptSpan[];
+  /** Changes exactly when the tree does. */
+  treeKey: string;
+  /**
+   * Changes when what is coloured changes - an expression or heading edited,
+   * added or removed - but not when text around them merely moves.
+   */
+  spanKey: string;
+}
+
+/**
+ * Analyses a document once for everything downstream. The two keys let callers
+ * tell cheaply whether anything they show has changed: typing ordinary prose
+ * leaves both untouched.
+ */
+export function analyze(text: string): Analysis {
+  const headings = definitionHeadings(text);
+  const tree = treeFrom(text, headings);
+  const spans = conceptSpans(text);
+  const headingSpans = headings
+    .filter((heading) => resolveNode(tree, heading.segments))
+    .map(({ start, end }) => ({ start, end }));
+
+  const textOf = (span: ConceptSpan) => text.slice(span.start, span.end);
+  return {
+    tree,
+    spans,
+    headingSpans,
+    treeKey: JSON.stringify(tree),
+    spanKey: `${spans.map(textOf).join('\n')}\n\n${headingSpans.map(textOf).join('\n')}`,
+  };
+}
+
+/**
+ * A concept's JSON cut short for previews. Tooltips and suggestion details only
+ * need a glimpse, and rendering a large subtree there is visibly slow. A line too
+ * long to fit - usually a definition - is cut rather than dropped.
+ */
+export function previewJson(node: ConceptNode, maxLines = 40, maxChars = 2000): string {
+  const json = dumpJson(node);
+  const lines = json.split('\n');
+  if (lines.length <= maxLines && json.length <= maxChars) {
+    return json;
+  }
+
+  let preview = '';
+  let kept = 0;
+  for (const line of lines) {
+    if (kept === maxLines) {
+      break;
+    }
+    const room = maxChars - preview.length - (kept > 0 ? 1 : 0);
+    if (line.length > room) {
+      preview += (kept > 0 ? '\n' : '') + line.slice(0, Math.max(0, room - 1)) + '…';
+      kept++;
+      break;
+    }
+    preview += (kept > 0 ? '\n' : '') + line;
+    kept++;
+  }
+  return `${preview}\n… ${lines.length - kept} more lines`;
 }

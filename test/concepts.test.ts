@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  analyze,
   buildTree,
   conceptSpans,
   definitionHeadings,
+  dumpJson,
   dumpText,
   parseContextAt,
   pathActions,
+  previewJson,
   scopeFunction,
   scopeFunctionsMatching,
   startsLine,
@@ -410,4 +413,59 @@ test('ordinary $. completion still offers defined concepts', () => {
     ['$.screens.Splash $.screens.Login', '', '#### $.screens.Splash', 'Defined.', '---'].join('\n')
   );
   assert.deepEqual(suggestionsFor(tree, ['screens'], ''), ['Splash', 'Login']);
+});
+
+// --- scale -------------------------------------------------------------------
+
+test('analyze agrees with buildTree and finds what to colour', () => {
+  const text = ['$.screens.Splash and $.auth.token', '', '#### $.auth.token', 'A token.'].join('\n');
+  const analysis = analyze(text);
+  const slice = (span: { start: number; end: number }) => text.slice(span.start, span.end);
+
+  assert.deepEqual(analysis.tree, buildTree(text));
+  assert.deepEqual(analysis.spans.map(slice), ['$.screens.Splash', '$.auth.token', '$.auth.token']);
+  assert.deepEqual(analysis.headingSpans.map(slice), ['#### $.auth.token']);
+});
+
+test('typing prose changes neither key, so nothing downstream reruns', () => {
+  const before = analyze('Intro $.screens.Splash here.\n\n#### $.a\nBody.');
+  const after = analyze('Intro text $.screens.Splash here, and more.\n\n#### $.a\nBody.');
+  assert.equal(after.treeKey, before.treeKey);
+  assert.equal(after.spanKey, before.spanKey);
+});
+
+test('editing a reference changes both keys', () => {
+  const before = analyze('See $.screens.Splash.');
+  const after = analyze('See $.screens.Splashy.');
+  assert.notEqual(after.treeKey, before.treeKey);
+  assert.notEqual(after.spanKey, before.spanKey);
+});
+
+test('editing a definition body changes the tree but not what is coloured', () => {
+  const before = analyze('#### $.a\nBody.');
+  const after = analyze('#### $.a\nBody, edited.');
+  assert.notEqual(after.treeKey, before.treeKey);
+  assert.equal(after.spanKey, before.spanKey);
+});
+
+test('a small concept previews in full', () => {
+  const tree = buildTree('$.a.b');
+  assert.equal(previewJson(tree), dumpJson(tree));
+});
+
+test('a large concept previews cut short, saying how much is hidden', () => {
+  const tree = buildTree(Array.from({ length: 200 }, (_, i) => `$.big.c${i}`).join(' '));
+  const preview = previewJson(tree, 40, 2000);
+  const lines = preview.split('\n');
+
+  assert.ok(lines.length <= 41, `at most 40 lines and the note, got ${lines.length}`);
+  assert.ok(preview.length <= 2100, `stays near the character cap, got ${preview.length}`);
+  assert.match(lines[lines.length - 1], /^… \d+ more lines$/);
+});
+
+test('a line too long for the preview is cut rather than dropped', () => {
+  const tree = buildTree('#### $.a\n' + 'word '.repeat(2000));
+  const preview = previewJson(tree, 40, 500);
+  assert.match(preview, /"\(\$\.def\)": "word word/);
+  assert.ok(preview.length <= 600, `got ${preview.length}`);
 });

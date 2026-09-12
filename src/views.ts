@@ -1,6 +1,14 @@
 import * as vscode from 'vscode';
 import { ConceptStore } from './store';
-import { childKeys, countDescendants, dumpJson, resolveNode, ConceptNode, MARKER } from './concepts';
+import {
+  childKeys,
+  countDescendants,
+  dumpJson,
+  previewJson,
+  resolveNode,
+  ConceptNode,
+  MARKER,
+} from './concepts';
 
 /** Scheme of the read-only, live-updating JSON view of a document's `root`. */
 export const LIVE_SCHEME = 'pratyaya';
@@ -16,8 +24,8 @@ export function liveUriFor(source: vscode.Uri): vscode.Uri {
 }
 
 /**
- * Renders a document's `root` object as JSON, and re-renders on every keystroke
- * in the source document.
+ * Renders a document's `root` object as JSON, and re-renders whenever it changes -
+ * once typing pauses, and only if the tree itself is different.
  */
 export class LiveTreeDocumentProvider
   implements vscode.TextDocumentContentProvider, vscode.Disposable
@@ -72,7 +80,7 @@ export class LiveTreeDocumentProvider
 export class ConceptItem extends vscode.TreeItem {
   constructor(
     readonly segments: string[],
-    node: ConceptNode,
+    readonly node: ConceptNode,
     hasChildren: boolean
   ) {
     super(
@@ -86,11 +94,7 @@ export class ConceptItem extends vscode.TreeItem {
     this.description = children.length > 0 ? `${children.length}` : undefined;
     this.iconPath = new vscode.ThemeIcon(children.length > 0 ? 'symbol-namespace' : 'symbol-field');
     this.contextValue = 'pratyayaConcept';
-
-    const tooltip = new vscode.MarkdownString();
-    tooltip.appendCodeblock([MARKER, ...segments].join('.'), 'text');
-    tooltip.appendCodeblock(dumpJson(node), 'json');
-    this.tooltip = tooltip;
+    // The tooltip is built by `resolveTreeItem`, only when someone hovers.
   }
 }
 
@@ -131,6 +135,14 @@ export class ConceptTreeProvider
 
   getTreeItem(element: ConceptItem): vscode.TreeItem {
     return element;
+  }
+
+  resolveTreeItem(item: vscode.TreeItem, element: ConceptItem): vscode.TreeItem {
+    const tooltip = new vscode.MarkdownString();
+    tooltip.appendCodeblock([MARKER, ...element.segments].join('.'), 'text');
+    tooltip.appendCodeblock(previewJson(element.node), 'json');
+    item.tooltip = tooltip;
+    return item;
   }
 
   getChildren(element?: ConceptItem): ConceptItem[] {
