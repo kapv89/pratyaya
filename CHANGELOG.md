@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.0
+
+- Rename a concept across the document: <kbd>F2</kbd> on any name in a `$.`
+  reference, or **Rename concept…** in the Concepts view. Every reference
+  running through the concept is renamed in one edit, so its children move with
+  it and its definition stays attached. Headings and fenced code blocks are
+  included, and different concepts with the same name are left alone.
+- Renaming onto a name that already exists beside the concept merges the two,
+  after asking.
+
 ## 1.3.1
 
 - Fenced code blocks are code, not markdown. A `# comment` or `---` line inside

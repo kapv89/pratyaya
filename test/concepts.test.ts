@@ -3,13 +3,16 @@ import { test } from 'node:test';
 import {
   analyze,
   buildTree,
+  conceptAt,
   conceptSpans,
   definitionHeadings,
   dumpJson,
   dumpText,
+  isConceptName,
   parseContextAt,
   pathActions,
   previewJson,
+  renameRanges,
   scopeFunction,
   scopeFunctionsMatching,
   startsLine,
@@ -406,6 +409,89 @@ test('a definition heading is not mistaken for one when it is malformed', () => 
   assert.deepEqual(definitionHeadings('##### $.a\nbody'), []); // five
   assert.deepEqual(definitionHeadings('#### $.a trailing words\nbody'), []);
   assert.deepEqual(definitionHeadings('#### not-a-concept\nbody'), []);
+});
+
+/** Applies a rename the way the editor does, writing the new name over each range. */
+function rename(text: string, path: string[], newName: string): string {
+  return renameRanges(text, path)
+    .reverse()
+    .reduce((out, range) => out.slice(0, range.start) + newName + out.slice(range.end), text);
+}
+
+test('the concept name under the cursor is found from either side of it', () => {
+  const text = 'See $.screens.Splash now';
+  const screens = { path: ['screens'], start: 6, end: 13 };
+  const splash = { path: ['screens', 'Splash'], start: 14, end: 20 };
+  assert.deepEqual(conceptAt(text, 6), screens);
+  assert.deepEqual(conceptAt(text, 13), screens);
+  assert.deepEqual(conceptAt(text, 17), splash);
+  assert.deepEqual(conceptAt(text, 20), splash);
+});
+
+test('the $, prose and scope functions are not concept names to rename', () => {
+  const text = 'See $.screens.Splash now';
+  assert.equal(conceptAt(text, 4), undefined); // before the $
+  assert.equal(conceptAt(text, 5), undefined); // between the $ and the dot
+  assert.equal(conceptAt(text, 22), undefined); // prose
+  assert.equal(conceptAt('$->define.screens', 12), undefined);
+});
+
+test('renaming a concept renames it in every reference through it, and nothing else', () => {
+  const text = [
+    'The $.screens.Splash has a $.screens.Splash.logo,',
+    '#### $.screens.Splash',
+    'Not $.other.Splash, nor $.screens.SplashV2.',
+    '```',
+    '$.screens.Splash',
+    '```',
+  ].join('\n');
+  assert.equal(
+    rename(text, ['screens', 'Splash'], 'Launch'),
+    [
+      'The $.screens.Launch has a $.screens.Launch.logo,',
+      '#### $.screens.Launch',
+      'Not $.other.Splash, nor $.screens.SplashV2.',
+      '```',
+      '$.screens.Launch',
+      '```',
+    ].join('\n')
+  );
+});
+
+test('renaming a top-level concept moves everything beneath it', () => {
+  assert.equal(
+    rename('$.screens.Splash, $.screens.Login and $.screen', ['screens'], 'pages'),
+    '$.pages.Splash, $.pages.Login and $.screen'
+  );
+});
+
+test('a definition stays with its concept through a rename', () => {
+  assert.deepEqual(buildTree(rename('#### $.auth.token\nA token.', ['auth', 'token'], 'key')), {
+    auth: { '($)': 'auth', key: { '($)': 'key', '($->def)': 'A token.' } },
+  });
+});
+
+test('renaming onto an existing sibling merges the two', () => {
+  const text = '$.ui.LoginButton.icon and $.ui.login-button.label';
+  assert.deepEqual(buildTree(rename(text, ['ui', 'LoginButton'], 'login-button')), {
+    ui: {
+      '($)': 'ui',
+      'login-button': {
+        '($)': 'login-button',
+        icon: { '($)': 'icon' },
+        label: { '($)': 'label' },
+      },
+    },
+  });
+});
+
+test('a concept name is letters, digits, _ and - only', () => {
+  for (const name of ['Splash', 'login-button', 'v2_token', '9']) {
+    assert.equal(isConceptName(name), true, name);
+  }
+  for (const name of ['', 'two words', 'a.b', '$x', 'naïve']) {
+    assert.equal(isConceptName(name), false, name);
+  }
 });
 
 test('a definition body is not scanned away from the concepts inside it', () => {

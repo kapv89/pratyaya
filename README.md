@@ -114,8 +114,8 @@ A reference is `$` followed by one or more dot-separated names, each made of
   `$.screens.Splash,` the reference is just the path, and the path is all that is
   coloured.
 - **The tree follows the text.** Delete the last mention of a concept and it
-  leaves the tree. To rename one, search and replace its path. There is no other
-  copy to update.
+  leaves the tree. To rename one, [rename it](#renaming-a-concept) and every
+  reference follows. There is no other copy to update.
 
 ### The shape of `root`
 
@@ -167,6 +167,36 @@ Suggestions keep document order rather than sorting alphabetically, so the list
 reads the way the spec does. Branch concepts show a module icon, leaves a field
 icon, and the details pane previews the subtree under the concept, definitions
 included.
+
+### Renaming a concept
+
+Put the cursor on any name in a reference and press <kbd>F2</kbd>. You can also
+right-click a concept in the Concepts view and choose **Rename concept…**, or
+select it there and press <kbd>F2</kbd>. The concept is renamed across the
+document in one edit, and a single undo reverts it.
+
+Renaming `Splash` in `$.screens.Splash` to `Launch`:
+
+| Before | After |
+| --- | --- |
+| `$.screens.Splash` | `$.screens.Launch` |
+| `$.screens.Splash.logo` | `$.screens.Launch.logo` - children move with it |
+| `#### $.screens.Splash` | `#### $.screens.Launch` - the definition stays attached |
+| `$.other.Splash` | unchanged - a different concept |
+| `$.screens.SplashV2` | unchanged - a different name |
+
+- **Every reference that builds the tree is renamed.** That includes definition
+  headings, references inside definitions, and references inside fenced code
+  blocks.
+- **Any name in the path can be renamed.** Renaming `screens` moves every screen.
+- **The new name follows the usual rule:** letters, digits, `_` and `-`.
+  Anything else is refused and the document is left alone.
+- **Renaming onto a name that already exists beside it merges the two**, once you
+  confirm. Their references become one concept and their children combine. If
+  both have a definition, both headings stay and the one later in the document
+  wins.
+- **A dump already in the document is a snapshot.** Its JSON keys keep the old
+  name until you dump again.
 
 ## `$->define` - definitions
 
@@ -293,7 +323,9 @@ as a malformed expression, so completion just stops there.
   moves to a non-markdown editor. The title shows the concept count and each
   branch shows its number of children. Hover a concept for its path and JSON,
   definition included. Its inline button inserts that concept's `$.` reference at
-  the cursor. The button in the view's title bar opens the live view.
+  the cursor. Right-click a concept, or select it and press <kbd>F2</kbd>, to
+  [rename it](#renaming-a-concept). The button in the view's title bar opens the
+  live view.
 - **Pratyaya: Show live concept tree** — opens `root` as read-only JSON beside
   the document. It re-renders when you pause typing, and the spec is untouched.
 - **Pratyaya: Dump concept tree at cursor** — the `$->dump` output without typing
@@ -365,6 +397,8 @@ dumping are all unit tested in [`test/concepts.test.ts`](test/concepts.test.ts).
 [`src/store.ts`](src/store.ts) keeps a live analysis of each document, redone
 only when typing pauses or completion needs it,
 [`src/highlight.ts`](src/highlight.ts) colours the expressions,
+[`src/rename.ts`](src/rename.ts) renames a concept from <kbd>F2</kbd> or the
+sidebar,
 [`src/views.ts`](src/views.ts) draws the sidebar and the live JSON view, and
 [`src/extension.ts`](src/extension.ts) is the editor glue.
 

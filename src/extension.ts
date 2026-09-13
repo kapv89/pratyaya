@@ -17,6 +17,7 @@ import {
   MARKER,
 } from './concepts';
 import { ConceptHighlighter } from './highlight';
+import { ConceptRenameProvider, renameFromView } from './rename';
 import { ConceptStore } from './store';
 import { ConceptItem, ConceptTreeProvider, LiveTreeDocumentProvider, LIVE_SCHEME } from './views';
 
@@ -57,10 +58,14 @@ export function activate(context: vscode.ExtensionContext) {
   let providerRegistration: vscode.Disposable | undefined;
   const registerProvider = () => {
     providerRegistration?.dispose();
-    providerRegistration = vscode.languages.registerCompletionItemProvider(
-      enabledLanguages().map((language) => ({ language })),
-      new ConceptCompletionProvider(store),
-      ...TRIGGER_CHARACTERS
+    const selector = enabledLanguages().map((language) => ({ language }));
+    providerRegistration = vscode.Disposable.from(
+      vscode.languages.registerCompletionItemProvider(
+        selector,
+        new ConceptCompletionProvider(store),
+        ...TRIGGER_CHARACTERS
+      ),
+      vscode.languages.registerRenameProvider(selector, new ConceptRenameProvider(store))
     );
   };
   registerProvider();
@@ -87,6 +92,9 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('pratyaya.showTree', () => showLiveTree(liveDocuments)),
     vscode.commands.registerCommand('pratyaya.insertPath', (item?: ConceptItem) =>
       insertPath(item)
+    ),
+    vscode.commands.registerCommand('pratyaya.renameConcept', (item?: ConceptItem, newName?: string) =>
+      renameFromView(store, conceptTree, treeView.selection, item, newName)
     ),
     vscode.commands.registerCommand('pratyaya.invalidNotice', () => {
       vscode.window.showWarningMessage(

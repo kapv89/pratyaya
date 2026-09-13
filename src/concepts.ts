@@ -309,6 +309,64 @@ export function conceptSpans(text: string): ConceptSpan[] {
   }));
 }
 
+/** One name inside a `$.a.b.c` reference, and where it sits in the text. */
+export interface ConceptOccurrence {
+  /** The path from the top of `root` down to, and including, this name. */
+  path: string[];
+  /** Offsets of the name alone, without the dot before it. */
+  start: number;
+  end: number;
+}
+
+/** Is this usable as one name in a concept path? */
+export function isConceptName(name: string): boolean {
+  return name !== '' && SEGMENT_RE.test(name);
+}
+
+/** Every `$.a.b.c` reference in a text - the ones that build `root` - split into its names. */
+function* references(text: string): Generator<ConceptOccurrence[]> {
+  for (const match of text.matchAll(PATH_SCAN_RE)) {
+    const names = match[1].slice(1).split('.');
+    let offset = match.index + MARKER.length;
+    yield names.map((name, i) => {
+      const start = offset + 1; // past the dot
+      offset = start + name.length;
+      return { path: names.slice(0, i + 1), start, end: offset };
+    });
+  }
+}
+
+/**
+ * The concept name the cursor is on, touching it from either side, in a `$.`
+ * reference. The `$` and the dots belong to no name, and neither do `$->`
+ * functions, which are not part of `root`.
+ */
+export function conceptAt(text: string, offset: number): ConceptOccurrence | undefined {
+  for (const names of references(text)) {
+    const hit = names.find((name) => name.start <= offset && offset <= name.end);
+    if (hit) {
+      return hit;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Where to write a new name to rename the concept at `path`: that name in every
+ * reference running through the concept, so everything beneath it moves too.
+ * `$.a.b` and `$.a.b.c` both rename `b`; `$.x.b` and `$.a.bc` are left alone.
+ */
+export function renameRanges(text: string, path: string[]): ConceptSpan[] {
+  const depth = path.length - 1;
+  const ranges: ConceptSpan[] = [];
+  for (const names of references(text)) {
+    if (names.length > depth && names[depth].path.every((name, i) => name === path[i])) {
+      ranges.push({ start: names[depth].start, end: names[depth].end });
+    }
+  }
+  return ranges;
+}
+
 export type Context =
   /** Cursor is not inside a concept expression. */
   | { kind: 'none' }

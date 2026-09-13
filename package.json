@@ -2,7 +2,7 @@
   "name": "pratyaya",
   "displayName": "Pratyaya",
   "description": "Capture key concepts inside large markdown specs with a $ concept tree, autocomplete, and JSON dump.",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "publisher": "kapv89",
   "license": "MIT",
   "author": {
@@ -57,6 +57,17 @@
         "command": "pratyaya.insertPath",
         "title": "Insert reference",
         "icon": "$(insert)"
+      },
+      {
+        "command": "pratyaya.renameConcept",
+        "title": "Rename concept…"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "pratyaya.renameConcept",
+        "key": "f2",
+        "when": "focusedView == pratyaya.conceptTree"
       }
     ],
     "views": {
@@ -83,11 +94,20 @@
           "command": "pratyaya.insertPath",
           "when": "view == pratyaya.conceptTree && viewItem == pratyayaConcept",
           "group": "inline"
+        },
+        {
+          "command": "pratyaya.renameConcept",
+          "when": "view == pratyaya.conceptTree && viewItem == pratyayaConcept",
+          "group": "1_modify"
         }
       ],
       "commandPalette": [
         {
           "command": "pratyaya.insertPath",
+          "when": "false"
+        },
+        {
+          "command": "pratyaya.renameConcept",
           "when": "false"
         }
       ]
