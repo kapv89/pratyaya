@@ -2,7 +2,7 @@
   "name": "pratyaya",
   "displayName": "Pratyaya",
   "description": "Capture key concepts inside large markdown specs with a $ concept tree, autocomplete, and JSON dump.",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "publisher": "kapv89",
   "license": "MIT",
   "author": {

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import * as vscode from 'vscode';
+import { decorationOptions } from '../../src/highlight';
 import { liveUriFor } from '../../src/views';
 
 /**
@@ -109,6 +110,13 @@ suite('live updates in an unsaved document', () => {
     const after = await vscode.workspace.openTextDocument(liveUri);
     assert.match(after.getText(), /"PrivateKey"/, 'live view did not pick up the new concept');
     assert.ok(editor.document.isDirty, 'document must still be unsaved');
+  });
+
+  test('colours never widen over text typed at their edges', () => {
+    // VS Code offers no way to read decorations back, so this pins the setting that
+    // decides it. With widening ranges, the lines typed under a heading written by
+    // $->define were coloured, and stayed so: nothing redraws unchanged headings.
+    assert.equal(decorationOptions().rangeBehavior, vscode.DecorationRangeBehavior.ClosedClosed);
   });
 
   test('the dump command writes the tree as it stands right now', async () => {

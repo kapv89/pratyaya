@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.1
+
+- Colours no longer spread onto text typed at the edge of a coloured range.
+  Typing under a heading that `$->define` had just written coloured the new
+  lines, and they stayed coloured until an unrelated edit redrew the editor.
+  This came in with 1.2.0.
+
 ## 1.4.0
 
 - Rename a concept across the document: <kbd>F2</kbd> on any name in a `$.`

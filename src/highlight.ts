@@ -90,13 +90,20 @@ function highlightingEnabled(): boolean {
   return vscode.workspace.getConfiguration('pratyaya').get<boolean>('highlightConcepts', true);
 }
 
-function createDecoration(): vscode.TextEditorDecorationType {
+/** How concept colours are drawn, from the current settings. */
+export function decorationOptions(): vscode.DecorationRenderOptions {
   const configuration = vscode.workspace.getConfiguration('pratyaya');
-  return vscode.window.createTextEditorDecorationType({
+  return {
     // VS Code picks the branch matching the active theme kind.
     light: { color: configuration.get<string>('conceptColor.light', DEFAULT_LIGHT_COLOR) },
     dark: { color: configuration.get<string>('conceptColor.dark', DEFAULT_DARK_COLOR) },
-    // Edges do not stretch over typed text; see the class comment for why.
-    rangeBehavior: vscode.DecorationRangeBehavior.OpenOpen,
-  });
+    // Typing at either edge of a coloured range must not widen it. Colours are only
+    // redrawn when an expression or heading changes, so a widened range stays
+    // widened - over the lines typed under a new definition heading, for one.
+    rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
+  };
+}
+
+function createDecoration(): vscode.TextEditorDecorationType {
+  return vscode.window.createTextEditorDecorationType(decorationOptions());
 }
