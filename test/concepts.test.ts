@@ -325,6 +325,35 @@ test('a definition runs to the next heading of level 1 to 4', () => {
   assert.equal(definitionHeadings(text)[0].body, 'body\n##### Five\nmore');
 });
 
+test('headings and rules inside a fenced code block do not end a definition', () => {
+  const text = ['#### $.a', 'Run:', '```bash', '# install', 'npm i', '---', '```', 'done', '## Next'].join('\n');
+  assert.equal(definitionHeadings(text)[0].body, 'Run:\n```bash\n# install\nnpm i\n---\n```\ndone\n');
+});
+
+test('a fence closes only on a matching run at least as long as the opener', () => {
+  const text = ['#### $.a', '~~~~', '```', '# still code', '~~~', '# still code', '~~~~', '# end'].join('\n');
+  assert.equal(definitionHeadings(text)[0].body, '~~~~\n```\n# still code\n~~~\n# still code\n~~~~\n');
+  // A backtick run with a backtick after it is inline code, not a fence.
+  const inline = ['#### $.a', '``` `x` ```', '# end'].join('\n');
+  assert.equal(definitionHeadings(inline)[0].body, '``` `x` ```\n');
+});
+
+test('an indented fence, as in a list item, counts', () => {
+  const text = ['#### $.a', '1. Run:', '   ```bash', '   # install', '   ```', '# end'].join('\n');
+  assert.equal(definitionHeadings(text)[0].body, '1. Run:\n   ```bash\n   # install\n   ```\n');
+});
+
+test('a fence that is never closed runs to the end of the document', () => {
+  const text = ['#### $.a', '```', '# code', '---'].join('\n');
+  assert.equal(definitionHeadings(text)[0].body, '```\n# code\n---');
+});
+
+test('a definition heading inside a fenced code block is not a definition', () => {
+  const text = ['```markdown', '#### $.a', 'body', '```'].join('\n');
+  assert.deepEqual(definitionHeadings(text), []);
+  assert.deepEqual(buildTree(text), { a: { '($)': 'a' } }); // still a reference
+});
+
 test('a definition drops one blank line after its heading', () => {
   assert.equal(definitionHeadings('#### $.a\n\nbody\n---')[0].body, 'body\n');
   assert.equal(definitionHeadings('#### $.a\n\n\nbody\n---')[0].body, '\nbody\n');

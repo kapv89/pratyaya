@@ -208,22 +208,27 @@ reference like any other, which means `#### $.billing.Invoice` also declares
 `billing.Invoice`. You can define a concept before you first use it.
 
 For a line to count as a definition heading it must be exactly `####`, a space,
-and one path, with nothing else on the line. `#### $.auth.token (v2)`,
-`### $.auth.token` or an indented heading are still references, but they do not
-start a definition.
+and one path, with nothing else on the line, outside any fenced code block.
+`#### $.auth.token (v2)`, `### $.auth.token`, an indented heading or one shown
+inside a code fence are still references, but they do not start a definition.
 
 ### What the definition contains
 
-Everything under the heading is the definition. It stops at the first of these:
+Everything under the heading is the definition. It stops at the first of these,
+outside a fenced code block:
 
 - a line that begins with `---`
 - a line that begins with one to four `#` - any heading up to `####`, the next
   definition included
 - the end of the document
 
-Fenced code blocks get no special treatment. A `# comment` line inside a shell
-snippet ends the definition. For headings inside a definition, use `#####` and
-`######`, which do not end it.
+Lines inside a fenced code block are code, not markdown, so a `# comment` in a
+shell snippet or a `---` in YAML stays in the definition. A fence opens with
+three or more backticks or tildes, indented or not, so fences inside list items
+count. It closes on a line of the same character that is at least as long, or
+runs to the end of the document if it is never closed.
+
+For headings inside a definition, use `#####` and `######`, which do not end it.
 
 A single blank line either side is left out: the one you write after the heading,
 and the final newline of a document. Everything else, including markdown and

@@ -118,6 +118,16 @@ const DEFINITION_HEADING_RE = /^#{4}[ \t]+\$((?:\.[A-Za-z0-9_-]+)+)[ \t]*$/;
 /** A line that closes a definition: a rule, or a heading of level 1 to 4. */
 const DEFINITION_END_RE = /^(?:---[ \t]*|#{1,4}(?!#))/;
 
+/**
+ * A line that opens a fenced code block: three or more backticks or tildes. A
+ * backtick fence's info string may not contain a backtick. Indentation is allowed
+ * so fences nested in list items count.
+ */
+const FENCE_OPEN_RE = /^[ \t]*(`{3,}(?=[^`]*$)|~{3,})/;
+
+/** A line that could close a fenced code block, once trimmed. */
+const FENCE_CLOSE_RE = /^(?:`{3,}|~{3,})$/;
+
 /** Is everything before `offset` on its line blank? */
 export function startsLine(text: string, offset: number): boolean {
   const lineStart = text.lastIndexOf('\n', offset - 1) + 1;
@@ -142,17 +152,36 @@ export interface DefinitionHeading {
  * of the document. A single blank line either side is dropped: the one after the
  * heading, and at the end of a document the final newline. Both belong to the
  * layout of the page rather than to the definition.
+ *
+ * Lines inside a fenced code block are code, not markdown: they neither start a
+ * definition nor end one, so a `# comment` in a shell snippet stays in the body.
+ * A fence that is never closed runs to the end of the document.
  */
 export function definitionHeadings(text: string): DefinitionHeading[] {
-  const lines: { text: string; start: number }[] = [];
+  const lines: { text: string; start: number; fenced: boolean }[] = [];
   let offset = 0;
+  let fence: string | undefined; // the run that opened the current fence
   for (const line of text.split('\n')) {
-    lines.push({ text: line.replace(/\r$/, ''), start: offset });
+    const lineText = line.replace(/\r$/, '');
+    const fenced = fence !== undefined;
+    if (fence === undefined) {
+      fence = FENCE_OPEN_RE.exec(lineText)?.[1];
+    } else {
+      const trimmed = lineText.trim();
+      if (FENCE_CLOSE_RE.test(trimmed) && trimmed[0] === fence[0] && trimmed.length >= fence.length) {
+        fence = undefined;
+      }
+    }
+    // The opening line is part of the fence too, though nothing on it can match.
+    lines.push({ text: lineText, start: offset, fenced: fenced || fence !== undefined });
     offset += line.length + 1;
   }
 
   const headings: DefinitionHeading[] = [];
   for (let i = 0; i < lines.length; i++) {
+    if (lines[i].fenced) {
+      continue;
+    }
     const match = DEFINITION_HEADING_RE.exec(lines[i].text);
     if (!match) {
       continue;
@@ -162,7 +191,7 @@ export function definitionHeadings(text: string): DefinitionHeading[] {
     let end = text.length;
     let atEof = true;
     for (let j = i + 1; j < lines.length; j++) {
-      if (DEFINITION_END_RE.test(lines[j].text)) {
+      if (!lines[j].fenced && DEFINITION_END_RE.test(lines[j].text)) {
         end = lines[j].start;
         atEof = false;
         break;

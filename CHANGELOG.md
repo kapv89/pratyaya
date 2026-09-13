@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.1
+
+- Fenced code blocks are code, not markdown. A `# comment` or `---` line inside
+  a fence no longer ends a definition, so shell snippets and YAML can sit in a
+  definition whole. A fence runs to its matching closing fence, or to the end of
+  the document if it is never closed.
+- A `#### $.a.b` line inside a fence no longer starts a definition, so a spec can
+  show an example heading. It still counts as a reference.
+
 ## 1.3.0
 
 - A concept's definition is now stored under `($->def)` instead of `($.def)`.
