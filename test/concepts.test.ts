@@ -344,26 +344,32 @@ test('a definition is stored on its concept, beside the name', () => {
   assert.deepEqual(buildTree(text), {
     screens: {
       '($)': 'screens',
-      Splash: { '($)': 'Splash', '($.def)': 'The first screen.' },
+      Splash: { '($)': 'Splash', '($->def)': 'The first screen.' },
     },
   });
 });
 
 test('a definition heading declares its concept on its own', () => {
   assert.deepEqual(buildTree('#### $.auth.token\nA token.'), {
-    auth: { '($)': 'auth', token: { '($)': 'token', '($.def)': 'A token.' } },
+    auth: { '($)': 'auth', token: { '($)': 'token', '($->def)': 'A token.' } },
   });
 });
 
 test('definitions are part of the dump', () => {
   const json = dumpText(buildTree('#### $.a\nbody'), false);
-  assert.match(json, /"\(\$\.def\)": "body"/);
+  assert.match(json, /"\(\$->def\)": "body"/);
+});
+
+test('a dump written back into the document adds no concepts', () => {
+  const text = '#### $.a\nbody\n---\n';
+  const withDump = `${text}\n${dumpText(buildTree(text), true)}\n`;
+  assert.deepEqual(buildTree(withDump), buildTree(text));
 });
 
 test('the last definition of a concept wins', () => {
   const text = ['#### $.a', 'first', '---', '#### $.a', 'second'].join('\n');
   const tree = buildTree(text) as { a: Record<string, string> };
-  assert.equal(tree.a['($.def)'], 'second');
+  assert.equal(tree.a['($->def)'], 'second');
 });
 
 test('a definition heading is not mistaken for one when it is malformed', () => {
@@ -466,6 +472,6 @@ test('a large concept previews cut short, saying how much is hidden', () => {
 test('a line too long for the preview is cut rather than dropped', () => {
   const tree = buildTree('#### $.a\n' + 'word '.repeat(2000));
   const preview = previewJson(tree, 40, 500);
-  assert.match(preview, /"\(\$\.def\)": "word word/);
+  assert.match(preview, /"\(\$->def\)": "word word/);
   assert.ok(preview.length <= 600, `got ${preview.length}`);
 });

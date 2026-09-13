@@ -14,7 +14,7 @@ export const MARKER = '$';
 export const MARKER_KEY = '($)';
 
 /** The key holding a concept's definition, written under a `####` heading. */
-export const DEF_KEY = '($.def)';
+export const DEF_KEY = '($->def)';
 
 /**
  * The accessor that reaches the scope's functions: `$->dump`.
@@ -196,7 +196,7 @@ export function buildTree(text: string): ConceptNode {
 
 function treeFrom(text: string, headings: DefinitionHeading[]): ConceptNode {
   // Collected first so a node can carry its definition from the moment it is
-  // created, which keeps `($.def)` next to `($)` in a dump.
+  // created, which keeps `($->def)` next to `($)` in a dump.
   const definitions = new Map<string, string>();
   for (const heading of headings) {
     definitions.set(heading.segments.join('.'), heading.body);

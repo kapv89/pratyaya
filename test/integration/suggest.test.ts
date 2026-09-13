@@ -116,7 +116,7 @@ suite('the suggest widget', () => {
     await acceptSuggestion();
 
     const text = editor.document.getText();
-    assert.match(text, /"\(\$\.def\)": "The first screen\.\\n\\n"/);
+    assert.match(text, /"\(\$->def\)": "The first screen\.\\n\\n"/);
   });
 
   test('the walk leaves out concepts that are already defined', async () => {

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0
+
+- A concept's definition is now stored under `($->def)` instead of `($.def)`.
+  The old key contained `$.def`, which read as a reference, so a dump written
+  into a spec that had definitions added a stray `def` concept to the tree.
+- The README now covers `$.`, `$->define` and `$->dump` in full: reference rules,
+  the shape of `root`, exactly where a definition ends, and how to refresh a dump.
+
 ## 1.2.0
 
 - Built for large specs. On a 50,000-word document, typing costs the same with
