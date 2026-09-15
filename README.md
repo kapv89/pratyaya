@@ -8,7 +8,7 @@ Install inside VSCode:
 
 Sample screenshot:
 
-![top secret spec.md screenshot](images/secret.spec.md.png)
+![top secret spec.md screenshot](images/spec.md.png)
 
 Capture the key concepts of a large markdown spec while you write it.
 
