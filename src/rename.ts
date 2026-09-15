@@ -5,21 +5,17 @@ import {
   isConceptName,
   renameRanges,
   resolveNode,
-  MARKER,
+  referenceText as reference,
 } from './concepts';
 import { ConceptStore } from './store';
 import { ConceptItem, ConceptTreeProvider } from './views';
 
 const NAME_RULE = 'Use letters, digits, _ and - only.';
 
-function reference(path: string[]): string {
-  return [MARKER, ...path].join('.');
-}
-
 /**
  * F2 on a concept name renames the concept across the document: that name in
- * every `$.` reference running through it, headings and code blocks included, so
- * everything beneath it moves with it.
+ * every `` `$.a.b` `` reference running through it, headings and code blocks
+ * included, so everything beneath it moves with it.
  */
 export class ConceptRenameProvider implements vscode.RenameProvider {
   constructor(private readonly store: ConceptStore) {}
@@ -46,7 +42,7 @@ function occurrenceAt(document: vscode.TextDocument, position: vscode.Position) 
   // A reference never crosses a line, so the line is all there is to read.
   const found = conceptAt(document.lineAt(position.line).text, position.character);
   if (!found) {
-    throw new Error(`Put the cursor on a concept name in a ${MARKER}. reference to rename it.`);
+    throw new Error('Put the cursor on a concept name in a `$.` reference to rename it.');
   }
   return {
     path: found.path,

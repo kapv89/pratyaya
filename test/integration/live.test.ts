@@ -42,7 +42,7 @@ async function completionsAt(
 /** Only the items Pratyaya contributed, ignoring word-based suggestions. */
 function conceptLabels(items: vscode.CompletionItem[]): string[] {
   return items
-    .filter((item) => typeof item.detail === 'string' && item.detail.startsWith('$'))
+    .filter((item) => typeof item.detail === 'string' && item.detail.startsWith('`$'))
     .map((item) => (typeof item.label === 'string' ? item.label : item.label.label));
 }
 
@@ -51,12 +51,12 @@ suite('live updates in an unsaved document', () => {
     const editor = await openDirtyMarkdown('# Spec\n\n');
 
     // Nothing exists yet.
-    let position = await type(editor, 'The $.');
+    let position = await type(editor, 'The `$.');
     assert.deepEqual(conceptLabels(await completionsAt(editor.document, position, '.')), []);
 
     // Write a concept, then ask again on a fresh line. No save in between.
-    await type(editor, 'screens.Splash needs a break\n\n');
-    position = await type(editor, 'Also $.');
+    await type(editor, 'screens.Splash` needs a break\n\n');
+    position = await type(editor, 'Also `$.');
     assert.ok(editor.document.isDirty, 'document must still be unsaved');
     assert.deepEqual(conceptLabels(await completionsAt(editor.document, position, '.')), ['screens']);
 
@@ -64,8 +64,8 @@ suite('live updates in an unsaved document', () => {
     assert.deepEqual(conceptLabels(await completionsAt(editor.document, position, '.')), ['Splash']);
 
     // A sibling typed one keystroke ago shows up on the next request.
-    await type(editor, 'NewUsername and\n\n');
-    position = await type(editor, 'then $.screens.');
+    await type(editor, 'NewUsername` and\n\n');
+    position = await type(editor, 'then `$.screens.');
     assert.deepEqual(conceptLabels(await completionsAt(editor.document, position, '.')), [
       'Splash',
       'NewUsername',
@@ -77,8 +77,8 @@ suite('live updates in an unsaved document', () => {
   });
 
   test('a malformed expression offers only the invalid entry', async () => {
-    const editor = await openDirtyMarkdown('$.screens.Splash\n\n');
-    const position = await type(editor, '$.\\.*$');
+    const editor = await openDirtyMarkdown('`$.screens.Splash`\n\n');
+    const position = await type(editor, '`$.\\.*$');
     const labels = (await completionsAt(editor.document, position)).map((item) =>
       typeof item.label === 'string' ? item.label : item.label.label
     );
@@ -87,7 +87,7 @@ suite('live updates in an unsaved document', () => {
   });
 
   test('the live tree view re-renders as the document changes', async () => {
-    const editor = await openDirtyMarkdown('$.screens.Splash\n\n');
+    const editor = await openDirtyMarkdown('`$.screens.Splash`\n\n');
     await vscode.commands.executeCommand('pratyaya.showTree');
 
     const liveUri = liveUriFor(editor.document.uri);
@@ -104,7 +104,7 @@ suite('live updates in an unsaved document', () => {
         }
       });
     });
-    await type(editor, '$.components.PrivateKey\n');
+    await type(editor, '`$.components.PrivateKey`\n');
     await Promise.race([changed, new Promise((resolve) => setTimeout(resolve, 3000))]);
 
     const after = await vscode.workspace.openTextDocument(liveUri);
@@ -120,8 +120,8 @@ suite('live updates in an unsaved document', () => {
   });
 
   test('the dump command writes the tree as it stands right now', async () => {
-    const editor = await openDirtyMarkdown('$.screens.Splash\n\n');
-    await type(editor, '$.components.PrivateKey\n\n');
+    const editor = await openDirtyMarkdown('`$.screens.Splash`\n\n');
+    await type(editor, '`$.components.PrivateKey`\n\n');
     await vscode.commands.executeCommand('pratyaya.dump');
 
     const text = editor.document.getText();

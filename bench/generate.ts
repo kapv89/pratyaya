@@ -1,7 +1,7 @@
 /**
  * Generates a large, well structured markdown spec for benchmarking: nested
  * headings, prose with concept references at a realistic density, and
- * `#### $.a.b` definitions. Seeded, so every run measures the same document.
+ * `` #### `$.a.b` `` definitions. Seeded, so every run measures the same document.
  */
 
 function mulberry32(seed: number): () => number {
@@ -65,7 +65,7 @@ export function generateSpec(targetWords = 50_000, seed = 42): Spec {
     const tokens: string[] = [];
     for (let i = 0; i < length; i++) {
       if (random() < 1 / 25) {
-        tokens.push(`$.${pick(paths)}` + (random() < 0.3 ? pick([',', '.', ';']) : ''));
+        tokens.push(`\`$.${pick(paths)}\`` +(random() < 0.3 ? pick([',', '.', ';']) : ''));
         references++;
       } else {
         tokens.push(pick(WORDS));
@@ -86,7 +86,7 @@ export function generateSpec(targetWords = 50_000, seed = 42): Spec {
         words += 2;
 
         if (random() < 0.45 && nextToDefine < paths.length) {
-          out.push(`#### $.${paths[nextToDefine++]}`, '', paragraph(40), '', paragraph(25));
+          out.push(`#### \`$.${paths[nextToDefine++]}\``,'', paragraph(40), '', paragraph(25));
           definitions++;
           words += 2;
           out.push(random() < 0.5 ? '---' : '', '');

@@ -2,7 +2,7 @@
   "name": "pratyaya",
   "displayName": "Pratyaya",
   "description": "Capture key concepts inside large markdown specs with a $ concept tree, autocomplete, and JSON dump.",
-  "version": "1.4.1",
+  "version": "2.0.0",
   "publisher": "kapv89",
   "license": "MIT",
   "author": {
@@ -52,6 +52,11 @@
         "title": "Pratyaya: Show live concept tree",
         "enablement": "editorLangId == markdown",
         "icon": "$(json)"
+      },
+      {
+        "command": "pratyaya.upgrade",
+        "title": "Pratyaya: Upgrade old-style concept expressions",
+        "enablement": "editorLangId == markdown"
       },
       {
         "command": "pratyaya.insertPath",
@@ -135,6 +140,11 @@
           "default": true,
           "description": "Colour $ concept expressions in the editor."
         },
+        "pratyaya.offerUpgrade": {
+          "type": "boolean",
+          "default": true,
+          "description": "Offer to wrap old-style $.a.b and $->dump expressions in backticks when a markdown file that still has them is opened. The \"Pratyaya: Upgrade old-style concept expressions\" command works either way."
+        },
         "pratyaya.conceptColor.dark": {
           "type": "string",
           "default": "#05c3f9",
@@ -156,7 +166,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "vscode:prepublish": "npm run compile",
-    "test": "npm run compile && node --test out/test/concepts.test.js",
+    "test": "npm run compile && node --test out/test/concepts.test.js out/test/legacy.test.js",
     "package": "vsce package",
     "test:integration": "npm run compile && node out/test/integration/runTest.js",
     "test:all": "npm test && npm run test:integration",

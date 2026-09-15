@@ -13,14 +13,14 @@ Sample screenshot:
 Capture the key concepts of a large markdown spec while you write it.
 
 Pratyaya is built for specs written to be handed to coding agents such as Claude
-Code. It adds three things to a markdown file, each typed inline and each
-starting with `$`:
+Code. It adds three things to a markdown file. Each is typed inline as inline
+code, starting with a backtick and a `$`:
 
 | You type | Feature | What it does |
 | --- | --- | --- |
-| `$.screens.Splash` | **The `$` tree** | References a concept. All the references in the document build one tree of concepts, and `$.` autocompletes from it. |
-| `$->define.` | **Definitions** | Walks the tree to a concept and turns the line into a `#### $.screens.Splash` heading. The text under that heading becomes the concept's definition. |
-| `$->dump` | **The dump** | Replaces itself with the whole tree, names, nesting and definitions included, as formatted JSON. |
+| `` `$.screens.Splash` `` | **The `$` tree** | References a concept. All the references in the document build one tree of concepts, and `` `$. `` autocompletes from it. |
+| `` `$->define. `` | **Definitions** | Walks the tree to a concept and turns the line into a `` #### `$.screens.Splash` `` heading. The text under that heading becomes the concept's definition. |
+| `` `$->dump `` | **The dump** | Replaces itself with the whole tree, names, nesting and definitions included, as formatted JSON. |
 
 References keep concept names consistent as the document grows. Definitions keep
 what a concept means in the same document as the places it is used. The dump
@@ -28,23 +28,33 @@ puts the full concept map in one block, for the agent and for you.
 
 The `$` is a type of an ode to my first commercial programming language - [PHP](https://www.php.net/).
 
+## Why backticks
+
+Markdown previews with maths support, VS Code's included, read two `$` signs on
+one line as a formula. A spec full of bare `$.screens.Splash` references renders
+as run-together italic maths. Inside inline code a `$` is just a character, so
+`` `$.screens.Splash` `` previews as what it is: a name in code font.
+
+Documents written for Pratyaya 1.x use bare references. See
+[Upgrading from 1.x](#upgrading-from-1x) to convert them in one step.
+
 ## A quick tour
 
-Write a spec as usual, putting `$` references where concepts come up. Here one
+Write a spec as usual, putting references where concepts come up. Here one
 concept also gets a definition:
 
 ```markdown
-The $.screens.Splash screen checks for an $.auth.token.
-Without one it redirects to $.screens.NewUsername.
+The `$.screens.Splash` screen checks for an `$.auth.token`.
+Without one it redirects to `$.screens.NewUsername`.
 
-#### $.auth.token
+#### `$.auth.token`
 
-The key a signed-in device holds, issued on $.screens.NewUsername.
+The key a signed-in device holds, issued on `$.screens.NewUsername`.
 ---
 ```
 
-Now type `$->dump` on an empty line and accept the suggestion. The expression is
-replaced with:
+Now type `` `$->dump `` on an empty line and accept the suggestion. The expression
+is replaced with:
 
 ```json
 {
@@ -61,7 +71,7 @@ replaced with:
     "($)": "auth",
     "token": {
       "($)": "token",
-      "($->def)": "The key a signed-in device holds, issued on $.screens.NewUsername.\n"
+      "($->def)": "The key a signed-in device holds, issued on `$.screens.NewUsername`.\n"
     }
   }
 }
@@ -85,34 +95,36 @@ Nothing is written to disk besides your markdown.
 
 | Reached with | What it is |
 | --- | --- |
-| `$.` | **`root`** - the concept tree. Pure data: concepts and nothing else. |
-| `$->` | **functions** - `define` and `dump`. |
+| `` `$. `` | **`root`** - the concept tree. Pure data: concepts and nothing else. |
+| `` `$-> `` | **functions** - `define` and `dump`. |
 
 A function is not a member of `root` and `root` is not a member of the functions.
 Nothing reached through `->` can ever be written into the tree, show up in a dump,
 or appear in the Concepts view. Because the two namespaces are separate, a
 concept of your own may be called `dump` without colliding with the function:
-`$.dump` is data, `$->dump` is the function.
+`` `$.dump` `` is data, `` `$->dump` `` is the function.
 
-A `$` only opens the scope once an accessor follows it. Every other dollar in a
-spec - `$5`, `$100`, `$(pwd)`, `$x$` - is left alone: no suggestions, no
-highlight, nothing in the tree.
+A `$` only opens the scope straight after a backtick and before an accessor. Every
+other dollar in a spec - `$5`, `$100`, `$(pwd)`, `$x$`, and a bare `$.a.b` - is
+left alone: no suggestions, no highlight, nothing in the tree.
 
-## `$.` - the concept tree
+## `` `$. `` - the concept tree
 
 ### Writing references
 
-A reference is `$` followed by one or more dot-separated names, each made of
-`[A-Za-z0-9_-]`: `$.screens.Splash`, `$.auth.private-key`, `$.v2.api_token`.
+A reference is inline code holding `$` and one or more dot-separated names, each
+made of `[A-Za-z0-9_-]`: `` `$.screens.Splash` ``, `` `$.auth.private-key` ``,
+`` `$.v2.api_token` ``.
 
-- **Referencing a path creates every level of it.** `$.screens.Splash` puts
+- **Referencing a path creates every level of it.** `` `$.screens.Splash` `` puts
   `screens` at the top and `Splash` under it. The parent does not need a mention
   of its own.
 - **Every occurrence counts.** Prose, lists, tables, headings and fenced code
   blocks all contribute to the tree.
-- **Punctuation ends a reference.** In `redirects to $.screens.Login.` or
-  `$.screens.Splash,` the reference is just the path, and the path is all that is
-  coloured.
+- **The code span is the reference, exactly.** It opens with a single backtick
+  right before the `$` and closes with one right after the last name.
+  `` `see $.screens.Splash` `` is code that mentions a path, not a reference, and
+  `` `$.screens.Splash `` without its closing backtick is not in the tree yet.
 - **The tree follows the text.** Delete the last mention of a concept and it
   leaves the tree. To rename one, [rename it](#renaming-a-concept) and every
   reference follows. There is no other copy to update.
@@ -121,9 +133,9 @@ A reference is `$` followed by one or more dot-separated names, each made of
 
 Writing this in a spec:
 
-```
-The $.screens.Splash screen checks for a $.components.PrivateKey.
-On failure it redirects to $.screens.NewUsername.
+```markdown
+The `$.screens.Splash` screen checks for a `$.components.PrivateKey`.
+On failure it redirects to `$.screens.NewUsername`.
 ```
 
 gives you this `root`:
@@ -154,14 +166,17 @@ concept, and its value is always an object.**
 
 ### Completion
 
+Type a backtick, then `$`, then `.` or `->`. Markdown does not close backticks for
+you, so type the closing one once you have picked the concept.
+
 | You type | You get |
 | --- | --- |
-| `$.` | the top-level concepts — `screens`, `components` |
-| `$.screens.` | that node's children — `Splash`, `NewUsername` |
-| `$.screens.S` | `Splash` only — filtering is by prefix, case-insensitive |
-| `$.screens.Payments` | nothing to suggest; the new concept is added to the tree |
-| `$.nothing.` | nothing - `nothing` is not in the tree yet |
-| `$->` | the scope's functions - `define` (at the start of a line only), `dump` |
+| `` `$. `` | the top-level concepts — `screens`, `components` |
+| `` `$.screens. `` | that node's children — `Splash`, `NewUsername` |
+| `` `$.screens.S `` | `Splash` only — filtering is by prefix, case-insensitive |
+| `` `$.screens.Payments` `` | nothing to suggest; the new concept is added to the tree |
+| `` `$.nothing. `` | nothing - `nothing` is not in the tree yet |
+| `` `$-> `` | the scope's functions - `define` (at the start of a line only), `dump` |
 
 Suggestions keep document order rather than sorting alphabetically, so the list
 reads the way the spec does. Branch concepts show a module icon, leaves a field
@@ -175,15 +190,15 @@ right-click a concept in the Concepts view and choose **Rename concept…**, or
 select it there and press <kbd>F2</kbd>. The concept is renamed across the
 document in one edit, and a single undo reverts it.
 
-Renaming `Splash` in `$.screens.Splash` to `Launch`:
+Renaming `Splash` in `` `$.screens.Splash` `` to `Launch`:
 
 | Before | After |
 | --- | --- |
-| `$.screens.Splash` | `$.screens.Launch` |
-| `$.screens.Splash.logo` | `$.screens.Launch.logo` - children move with it |
-| `#### $.screens.Splash` | `#### $.screens.Launch` - the definition stays attached |
-| `$.other.Splash` | unchanged - a different concept |
-| `$.screens.SplashV2` | unchanged - a different name |
+| `` `$.screens.Splash` `` | `` `$.screens.Launch` `` |
+| `` `$.screens.Splash.logo` `` | `` `$.screens.Launch.logo` `` - children move with it |
+| `` #### `$.screens.Splash` `` | `` #### `$.screens.Launch` `` - the definition stays attached |
+| `` `$.other.Splash` `` | unchanged - a different concept |
+| `` `$.screens.SplashV2` `` | unchanged - a different name |
 
 - **Every reference that builds the tree is renamed.** That includes definition
   headings, references inside definitions, and references inside fenced code
@@ -198,27 +213,27 @@ Renaming `Splash` in `$.screens.Splash` to `Launch`:
 - **A dump already in the document is a snapshot.** Its JSON keys keep the old
   name until you dump again.
 
-## `$->define` - definitions
+## `` `$->define `` - definitions
 
 A reference says *where* a concept is used. A definition says *what it is*, in
 the same document as everything else.
 
 ### The walk
 
-Type `$->define.` at the start of a line (indentation is fine). The walk offers
-the concepts you already have, one level at a time:
+Type `` `$->define. `` at the start of a line (indentation is fine). The walk
+offers the concepts you already have, one level at a time:
 
 | You type | You get |
 | --- | --- |
-| `$->define.` | the top-level concepts |
-| `$->define.au` | concepts starting with `au` |
-| `$->define.auth` | `()` to define `auth`, and `.` because it has children |
-| `$->define.auth.` | the children of `auth` |
-| `$->define.auth.token` | `()` alone - `token` is a leaf |
+| `` `$->define. `` | the top-level concepts |
+| `` `$->define.au `` | concepts starting with `au` |
+| `` `$->define.auth `` | `()` to define `auth`, and `.` because it has children |
+| `` `$->define.auth. `` | the children of `auth` |
+| `` `$->define.auth.token `` | `()` alone - `token` is a leaf |
 
 Picking a concept or `.` opens the next level straight away, so you can walk the
 whole way with the suggestion widget. Anywhere other than the start of a line,
-`$->` does not offer `define`.
+`` `$-> `` does not offer `define`.
 
 The walk only offers what is still undefined. A concept that already has a
 definition - even an empty one - is left out, unless something beneath it has
@@ -226,21 +241,22 @@ none yet. Then it stays, so you can walk through it, but without `()`.
 
 Choosing `()` ends the walk and replaces the whole line with a heading:
 
-```
-#### $.auth.token
+```markdown
+#### `$.auth.token`
 ```
 
 ### Writing the heading yourself
 
 The walk only reaches concepts that are already in the tree. The heading is
 plain markdown, so you can also type it directly. A heading is a concept
-reference like any other, which means `#### $.billing.Invoice` also declares
-`billing.Invoice`. You can define a concept before you first use it.
+reference like any other, which means `` #### `$.billing.Invoice` `` also
+declares `billing.Invoice`. You can define a concept before you first use it.
 
 For a line to count as a definition heading it must be exactly `####`, a space,
-and one path, with nothing else on the line, outside any fenced code block.
-`#### $.auth.token (v2)`, `### $.auth.token`, an indented heading or one shown
-inside a code fence are still references, but they do not start a definition.
+and one reference in backticks, with nothing else on the line, outside any fenced
+code block. `` #### `$.auth.token` (v2) ``, `` ### `$.auth.token` ``, an indented
+heading or one shown inside a code fence are still references, but they do not
+start a definition.
 
 ### What the definition contains
 
@@ -262,7 +278,7 @@ For headings inside a definition, use `#####` and `######`, which do not end it.
 
 A single blank line either side is left out: the one you write after the heading,
 and the final newline of a document. Everything else, including markdown and
-further `$` references, is kept verbatim.
+further references, is kept verbatim.
 
 The definition lands on the concept itself, under `($->def)`, beside the name:
 
@@ -275,25 +291,27 @@ The definition lands on the concept itself, under `($->def)`, beside the name:
 }
 ```
 
-So definitions travel with the tree. You will find them in every `$->dump`, in
-the live JSON view, in a concept's tooltip in the Concepts view, and in the
+So definitions travel with the tree. You will find them in every dump, in the
+live JSON view, in a concept's tooltip in the Concepts view, and in the
 completion details pane. If you write two definitions for one concept, the last
 one wins.
 
 Definition headings are coloured whole, in the concept colour, once their path
 resolves in the tree.
 
-## `$->dump` - the tree as JSON
+## `` `$->dump `` - the tree as JSON
 
-Type `$->dump` anywhere in a line and accept the suggestion. The expression is
-removed and `root` takes its place, as JSON indented by two spaces. By default
-the JSON is wrapped in a fenced `json` block. Turn `pratyaya.dumpAsCodeBlock` off
-for bare JSON.
+Type `` `$->dump `` anywhere in a line and accept the suggestion. The expression
+is removed, along with a closing backtick if you had already typed one, and
+`root` takes its place, as JSON indented by two spaces. By default the JSON is
+wrapped in a fenced `json` block. Turn `pratyaya.dumpAsCodeBlock` off for bare
+JSON.
 
 - **It is built when you accept it,** not when the suggestion list opened. It
   reflects the document as it is at that moment, unsaved text included.
 - **It is the whole tree.** Names, nesting and every `($->def)` definition are
-  there. There is no subtree dump: `$->dump.screens` is an invalid expression.
+  there. There is no subtree dump: `` `$->dump.screens `` is an invalid
+  expression.
 - **It is a snapshot.** The block is ordinary text and does not update as the
   spec changes. To refresh one, select the old block and run
   **Pratyaya: Dump concept tree at cursor**, which replaces every selection with
@@ -307,14 +325,43 @@ anything that consumes it.
 
 ## The invalid state
 
-Once `$.` or `$->` has been typed, anything that is not a well formed expression
-puts it into the invalid state: `$.\.*$`, `$..`, `$.a.b/c`, `$->dump.screens`.
-Completion stops and the list collapses to a single red, struck-through `invalid`
-entry. That entry can never be applied; accepting it inserts nothing at all and
-tells you why.
+Once `` `$. `` or `` `$-> `` has been typed, anything that is not a well formed
+expression puts it into the invalid state: `` `$.\.*$ ``, `` `$.. ``,
+`` `$.a.b/c ``, `` `$->dump.screens ``. Completion stops and the list collapses
+to a single red, struck-through `invalid` entry. That entry can never be applied;
+accepting it inserts nothing at all and tells you why.
 
-Punctuation that closes a sentence (`$.screens.Splash,`) is read as prose, not
-as a malformed expression, so completion just stops there.
+The closing backtick ends an expression, and so does punctuation that closes a
+sentence before it (`` `$.screens.Splash, ``). Either way completion just stops
+there.
+
+## Upgrading from 1.x
+
+Pratyaya 1.x read bare references - `$.screens.Splash`, `#### $.auth.token`,
+`$->dump`. Pratyaya 2 reads only the backticked form, so a 1.x spec has an empty
+tree until it is upgraded.
+
+When you open a markdown file that still has bare expressions, Pratyaya offers to
+upgrade it:
+
+- **Upgrade** wraps each one in backticks: `$.screens.Splash` becomes
+  `` `$.screens.Splash` `` and `#### $.auth.token` becomes
+  `` #### `$.auth.token` ``. It is a single edit, so one undo reverts it, and the
+  file is left unsaved for you to review.
+- **Never ask again** turns the offer off by setting `pratyaya.offerUpgrade` to
+  `false`. Set it back to `true` to see it again.
+- Dismissing the notification leaves the file alone. It is not offered again for
+  that file until VS Code restarts.
+
+**Pratyaya: Upgrade old-style concept expressions** in the Command Palette
+(<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>) does the same for the active file
+at any time, whatever the setting.
+
+Only prose is upgraded. Fenced code blocks and inline code are left exactly as
+they are: they never broke the preview, and a `$.store.book` there is as likely
+to be JSONPath as a concept. A reference that only ever appeared in code drops out
+of the tree; wrap it by hand if you want it back. A bare expression touching a
+stray backtick is also left for you to fix.
 
 ## Views and commands
 
@@ -322,14 +369,17 @@ as a malformed expression, so completion just stops there.
   tree of the markdown document you are editing, and keeps showing it when focus
   moves to a non-markdown editor. The title shows the concept count and each
   branch shows its number of children. Hover a concept for its path and JSON,
-  definition included. Its inline button inserts that concept's `$.` reference at
+  definition included. Its inline button inserts that concept's reference at
   the cursor. Right-click a concept, or select it and press <kbd>F2</kbd>, to
   [rename it](#renaming-a-concept). The button in the view's title bar opens the
   live view.
 - **Pratyaya: Show live concept tree** — opens `root` as read-only JSON beside
   the document. It re-renders when you pause typing, and the spec is untouched.
-- **Pratyaya: Dump concept tree at cursor** — the `$->dump` output without typing
-  the expression. It is inserted at every cursor and replaces every selection.
+- **Pratyaya: Dump concept tree at cursor** — the `` `$->dump `` output without
+  typing the expression. It is inserted at every cursor and replaces every
+  selection.
+- **Pratyaya: Upgrade old-style concept expressions** — wraps a 1.x document's
+  bare expressions in backticks. See [Upgrading from 1.x](#upgrading-from-1x).
 
 ## Settings
 
@@ -340,6 +390,7 @@ as a malformed expression, so completion just stops there.
 | `pratyaya.highlightConcepts` | `true` | Colour `$` expressions in the editor. |
 | `pratyaya.conceptColor.dark` | `#05c3f9` | Concept colour on dark themes. |
 | `pratyaya.conceptColor.light` | `#800c0c` | Concept colour on light themes. |
+| `pratyaya.offerUpgrade` | `true` | Offer to upgrade 1.x expressions when a file that has them is opened. |
 
 Colour changes take effect immediately - no reload.
 
@@ -394,17 +445,20 @@ Press <kbd>F5</kbd> to open an Extension Development Host on `examples/`.
 The concept tree lives in [`src/concepts.ts`](src/concepts.ts) as pure functions
 with no VS Code imports — parsing, tree building, definitions, filtering and
 dumping are all unit tested in [`test/concepts.test.ts`](test/concepts.test.ts).
+[`src/legacy.ts`](src/legacy.ts) finds 1.x expressions, also without VS Code,
+tested in [`test/legacy.test.ts`](test/legacy.test.ts).
 [`src/store.ts`](src/store.ts) keeps a live analysis of each document, redone
 only when typing pauses or completion needs it,
 [`src/highlight.ts`](src/highlight.ts) colours the expressions,
 [`src/rename.ts`](src/rename.ts) renames a concept from <kbd>F2</kbd> or the
 sidebar,
+[`src/upgrade.ts`](src/upgrade.ts) offers and runs the 1.x upgrade,
 [`src/views.ts`](src/views.ts) draws the sidebar and the live JSON view, and
 [`src/extension.ts`](src/extension.ts) is the editor glue.
 
 The scope's functions are the `SCOPE_FUNCTIONS` registry in `concepts.ts`, and
-adding an entry there is enough for it to be offered after `$->`. An entry takes
-one of two forms:
+adding an entry there is enough for it to be offered after `` `$-> ``. An entry
+takes one of two forms:
 
 - **`render`** replaces its own expression with text. `dump` works this way.
 - **`path`** walks `root` first, and its `call` rewrites the line once `()` is

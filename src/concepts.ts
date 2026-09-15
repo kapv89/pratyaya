@@ -7,6 +7,16 @@
 export const MARKER = '$';
 
 /**
+ * Every expression is written as inline code: `` `$.a.b` ``, `` `$->dump` ``.
+ * Markdown renderers with maths support read two bare `$` on a line as a formula,
+ * which mangles a spec's preview; inside a code span the `$` is left alone.
+ */
+export const QUOTE = '`';
+
+/** What an expression starts with: the backtick, then the marker. */
+export const OPENER = QUOTE + MARKER;
+
+/**
  * The key every node carries, holding its own name. Deliberately not the same as
  * `MARKER`: the document sigil is kept short to type, while the object keeps the
  * original `($)` marker so a dumped tree stays recognisable.
@@ -28,6 +38,11 @@ export const FUNCTION_ACCESSOR = '->';
 
 /** What `$->define` turns its line into. */
 export const DEFINITION_PREFIX = '#### ';
+
+/** A reference as written in the document: `` `$.a.b` ``. */
+export function referenceText(segments: string[]): string {
+  return `${OPENER}.${segments.join('.')}${QUOTE}`;
+}
 
 export interface ConceptNode {
   [key: string]: ConceptNode | string;
@@ -82,7 +97,7 @@ export const SCOPE_FUNCTIONS: readonly ScopeFunction[] = [
     lineStart: true,
     path: {
       callSummary: 'define this concept',
-      call: (segments) => `${DEFINITION_PREFIX}${MARKER}.${segments.join('.')}`,
+      call: (segments) => `${DEFINITION_PREFIX}${referenceText(segments)}`,
       // A concept with a definition, even an empty one, has nothing left to define.
       accepts: (node) => definitionOf(node) === undefined,
     },
@@ -103,17 +118,21 @@ export function scopeFunction(name: string): ScopeFunction | undefined {
 /** Characters allowed inside a single path segment. */
 const SEGMENT_RE = /^[A-Za-z0-9_-]*$/;
 
-/** Every complete `$.a.b.c` occurrence in a document. */
-const PATH_SCAN_RE = /\$((?:\.[A-Za-z0-9_-]+)+)/g;
+/** Every complete `` `$.a.b.c` `` occurrence in a document. */
+const PATH_SCAN_RE = /`\$((?:\.[A-Za-z0-9_-]+)+)`/g;
 
-/** Every concept expression in a document, for highlighting. */
-const CONCEPT_SCAN_RE = /\$->[A-Za-z0-9_]*(?:\.[A-Za-z0-9_-]+)*|\$(?:\.[A-Za-z0-9_-]+)+/g;
+/**
+ * Every concept expression in a document, for highlighting. A function is
+ * coloured before its closing backtick is typed, since it is only ever written to
+ * be accepted; a reference only once it is closed and so part of the tree.
+ */
+const CONCEPT_SCAN_RE = /`\$->[A-Za-z0-9_]*(?:\.[A-Za-z0-9_-]+)*`?|`\$(?:\.[A-Za-z0-9_-]+)+`/g;
 
 /** Punctuation that ends prose rather than continuing an expression. */
-const TRAILING_PROSE_RE = /[,;:!?)\]}"'`*]+$/;
+const TRAILING_PROSE_RE = /[,;:!?)\]}"'*]+$/;
 
-/** `#### $.a.b` on a line of its own - the head of a definition. */
-const DEFINITION_HEADING_RE = /^#{4}[ \t]+\$((?:\.[A-Za-z0-9_-]+)+)[ \t]*$/;
+/** `` #### `$.a.b` `` on a line of its own - the head of a definition. */
+const DEFINITION_HEADING_RE = /^#{4}[ \t]+`\$((?:\.[A-Za-z0-9_-]+)+)`[ \t]*$/;
 
 /** A line that closes a definition: a rule, or a heading of level 1 to 4. */
 const DEFINITION_END_RE = /^(?:---[ \t]*|#{1,4}(?!#))/;
@@ -134,7 +153,43 @@ export function startsLine(text: string, offset: number): boolean {
   return text.slice(lineStart, offset).trim() === '';
 }
 
-/** A `#### $.a.b` heading and the definition body that follows it. */
+/** One line of a document, and whether it sits inside a fenced code block. */
+export interface MarkdownLine {
+  text: string;
+  /** Offset of the line's first character. */
+  start: number;
+  /** Inside a fenced code block, its opening and closing lines included. */
+  fenced: boolean;
+}
+
+/**
+ * Splits a document into lines, marking those inside fenced code blocks. A fence
+ * closes on a line of the same character at least as long as its opener; one that
+ * is never closed runs to the end of the document.
+ */
+export function markdownLines(text: string): MarkdownLine[] {
+  const lines: MarkdownLine[] = [];
+  let offset = 0;
+  let fence: string | undefined; // the run that opened the current fence
+  for (const line of text.split('\n')) {
+    const lineText = line.replace(/\r$/, '');
+    const fenced = fence !== undefined;
+    if (fence === undefined) {
+      fence = FENCE_OPEN_RE.exec(lineText)?.[1];
+    } else {
+      const trimmed = lineText.trim();
+      if (FENCE_CLOSE_RE.test(trimmed) && trimmed[0] === fence[0] && trimmed.length >= fence.length) {
+        fence = undefined;
+      }
+    }
+    // The opening line is part of the fence too, though nothing on it can match.
+    lines.push({ text: lineText, start: offset, fenced: fenced || fence !== undefined });
+    offset += line.length + 1;
+  }
+  return lines;
+}
+
+/** A `` #### `$.a.b` `` heading and the definition body that follows it. */
 export interface DefinitionHeading {
   /** Offsets of the heading line itself, for highlighting. */
   start: number;
@@ -158,25 +213,7 @@ export interface DefinitionHeading {
  * A fence that is never closed runs to the end of the document.
  */
 export function definitionHeadings(text: string): DefinitionHeading[] {
-  const lines: { text: string; start: number; fenced: boolean }[] = [];
-  let offset = 0;
-  let fence: string | undefined; // the run that opened the current fence
-  for (const line of text.split('\n')) {
-    const lineText = line.replace(/\r$/, '');
-    const fenced = fence !== undefined;
-    if (fence === undefined) {
-      fence = FENCE_OPEN_RE.exec(lineText)?.[1];
-    } else {
-      const trimmed = lineText.trim();
-      if (FENCE_CLOSE_RE.test(trimmed) && trimmed[0] === fence[0] && trimmed.length >= fence.length) {
-        fence = undefined;
-      }
-    }
-    // The opening line is part of the fence too, though nothing on it can match.
-    lines.push({ text: lineText, start: offset, fenced: fenced || fence !== undefined });
-    offset += line.length + 1;
-  }
-
+  const lines = markdownLines(text);
   const headings: DefinitionHeading[] = [];
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].fenced) {
@@ -297,10 +334,11 @@ export interface ConceptSpan {
 }
 
 /**
- * Locates the concept expressions in a document: a `$` with its dotted path, or
- * with the `->` function accessor. A span stops where the expression stops, so
- * prose or punctuation written straight after it is left uncoloured, and a lone
- * `$` - a price, a shell prompt, some maths - is not a concept at all.
+ * Locates the concept expressions in a document: a backticked `$` with its dotted
+ * path, or with the `->` function accessor. A span covers the backticks and stops
+ * where the expression stops, so prose written straight after it is left
+ * uncoloured, and a bare `$` - a price, a shell prompt, some maths - is not a
+ * concept at all.
  */
 export function conceptSpans(text: string): ConceptSpan[] {
   return [...text.matchAll(CONCEPT_SCAN_RE)].map((match) => ({
@@ -323,11 +361,11 @@ export function isConceptName(name: string): boolean {
   return name !== '' && SEGMENT_RE.test(name);
 }
 
-/** Every `$.a.b.c` reference in a text - the ones that build `root` - split into its names. */
+/** Every `` `$.a.b.c` `` reference in a text - the ones that build `root` - split into its names. */
 function* references(text: string): Generator<ConceptOccurrence[]> {
   for (const match of text.matchAll(PATH_SCAN_RE)) {
     const names = match[1].slice(1).split('.');
-    let offset = match.index + MARKER.length;
+    let offset = match.index + OPENER.length;
     yield names.map((name, i) => {
       const start = offset + 1; // past the dot
       offset = start + name.length;
@@ -337,9 +375,9 @@ function* references(text: string): Generator<ConceptOccurrence[]> {
 }
 
 /**
- * The concept name the cursor is on, touching it from either side, in a `$.`
- * reference. The `$` and the dots belong to no name, and neither do `$->`
- * functions, which are not part of `root`.
+ * The concept name the cursor is on, touching it from either side, in a
+ * `` `$.a.b` `` reference. The backticks, the `$` and the dots belong to no name,
+ * and neither do `$->` functions, which are not part of `root`.
  */
 export function conceptAt(text: string, offset: number): ConceptOccurrence | undefined {
   for (const names of references(text)) {
@@ -391,12 +429,13 @@ export type Context =
 /**
  * Classifies the text immediately before `offset`.
  *
- * An expression runs from the first `$` of the current whitespace-delimited run
- * up to the cursor, and only counts once an accessor follows it: `$.` for a path
- * or `$->` for a scope function. That keeps every other `$` in a spec - prices,
- * shell snippets, maths - out of the way. Once an accessor has been opened,
- * anything that is not a well formed path puts the expression into the invalid
- * state, from which nothing can be applied.
+ * An expression runs from the last `` `$ `` of the current whitespace-delimited
+ * run up to the cursor, and only counts once an accessor follows it: `` `$. ``
+ * for a path or `` `$-> `` for a scope function. That keeps every other `$` in a
+ * spec - prices, shell snippets, maths - out of the way. A closing backtick ends
+ * the expression, and whatever follows it is prose. Before that, once an accessor
+ * has been opened, anything that is not a well formed path puts the expression
+ * into the invalid state, from which nothing can be applied.
  */
 export function parseContextAt(text: string, offset: number): Context {
   let runStart = offset;
@@ -405,16 +444,21 @@ export function parseContextAt(text: string, offset: number): Context {
   }
 
   const run = text.slice(runStart, offset);
-  const markerIndex = run.indexOf(MARKER);
-  if (markerIndex === -1) {
+  const openerIndex = run.lastIndexOf(OPENER);
+  if (openerIndex === -1) {
     return { kind: 'none' };
   }
 
-  const exprStart = runStart + markerIndex;
-  const tail = text.slice(exprStart + MARKER.length, offset);
+  const exprStart = runStart + openerIndex;
+  const tail = text.slice(exprStart + OPENER.length, offset);
 
-  // A bare `$`, or a `$` followed by anything other than an accessor, is prose.
+  // A bare opener, or one followed by anything other than an accessor, is prose.
   if (tail === '' || !(tail.startsWith('.') || tail.startsWith('-'))) {
+    return { kind: 'none' };
+  }
+
+  // `` `$.a.b` `` - the expression is closed, so the cursor is past it.
+  if (tail.includes(QUOTE)) {
     return { kind: 'none' };
   }
 
@@ -468,7 +512,7 @@ function splitPath(path: string): string[] | undefined {
   return parts;
 }
 
-/** Is this a finished expression, so what follows it is prose? */
+/** Is this a finished expression, so what follows it is prose, though its backtick is not typed yet? */
 function isCompleteTail(tail: string): boolean {
   if (tail === '') {
     return true;

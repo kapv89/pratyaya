@@ -15,10 +15,11 @@ import * as vscode from 'vscode';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function openMarkdown(content: string): Promise<vscode.TextEditor> {
+/** Opens a document with the cursor at the end, or `back` characters before it. */
+async function openMarkdown(content: string, back = 0): Promise<vscode.TextEditor> {
   const document = await vscode.workspace.openTextDocument({ language: 'markdown', content });
   const editor = await vscode.window.showTextDocument(document);
-  const end = document.lineAt(document.lineCount - 1).range.end;
+  const end = document.lineAt(document.lineCount - 1).range.end.translate(0, -back);
   editor.selection = new vscode.Selection(end, end);
   return editor;
 }
@@ -35,8 +36,8 @@ async function acceptSuggestion(nth = 0): Promise<void> {
 }
 
 suite('the suggest widget', () => {
-  test('$->dump is offered and inserts the tree', async () => {
-    const editor = await openMarkdown('$.screens.Splash\n\n$->dump');
+  test('`$->dump is offered and inserts the tree', async () => {
+    const editor = await openMarkdown('`$.screens.Splash`\n\n`$->dump');
 
     await acceptSuggestion();
 
@@ -46,8 +47,8 @@ suite('the suggest widget', () => {
     assert.match(text, /"Splash"/);
   });
 
-  test('$->du is enough to insert the tree', async () => {
-    const editor = await openMarkdown('$.screens.Splash\n\n$->du');
+  test('`$->du is enough to insert the tree', async () => {
+    const editor = await openMarkdown('`$.screens.Splash`\n\n`$->du');
 
     await acceptSuggestion();
 
@@ -56,8 +57,18 @@ suite('the suggest widget', () => {
     assert.match(text, /"Splash"/);
   });
 
+  test('a closing backtick after the cursor goes with the dump', async () => {
+    const editor = await openMarkdown('`$.screens.Splash`\n\n`$->dump`', 1);
+
+    await acceptSuggestion();
+
+    const text = editor.document.getText();
+    assert.ok(!text.includes('$->dump'), `expression not replaced, document is:\n${text}`);
+    assert.ok(text.endsWith('```'), `a stray backtick was left behind:\n${text}`);
+  });
+
   test('accepting from the invalid state leaves the document untouched', async () => {
-    const editor = await openMarkdown('$.screens.Splash\n\n$.\\.*$');
+    const editor = await openMarkdown('`$.screens.Splash`\n\n`$.\\.*$');
     const before = editor.document.getText();
 
     await acceptSuggestion();
@@ -66,33 +77,33 @@ suite('the suggest widget', () => {
   });
 
   test('a concept suggestion inserts just the concept name', async () => {
-    const editor = await openMarkdown('$.screens.Splash\n\n$.screens.Spl');
+    const editor = await openMarkdown('`$.screens.Splash`\n\n`$.screens.Spl');
 
     await acceptSuggestion();
 
-    assert.match(editor.document.getText(), /\$\.screens\.Splash$/);
+    assert.match(editor.document.getText(), /\n`\$\.screens\.Splash$/);
   });
 
-  test('$->define walks to a concept, and () rewrites the line', async () => {
-    const editor = await openMarkdown('$.screens.Splash\n\n$->define.screens');
+  test('`$->define walks to a concept, and () rewrites the line', async () => {
+    const editor = await openMarkdown('`$.screens.Splash`\n\n`$->define.screens');
 
     await acceptSuggestion();
 
-    assert.match(editor.document.getText(), /\n#### \$\.screens$/);
+    assert.match(editor.document.getText(), /\n#### `\$\.screens`$/);
   });
 
   test('the second choice is the . that walks a level deeper', async () => {
-    const editor = await openMarkdown('$.screens.Splash\n\n$->define.screens');
+    const editor = await openMarkdown('`$.screens.Splash`\n\n`$->define.screens');
 
     await acceptSuggestion(1);
 
     const text = editor.document.getText();
-    assert.ok(text.endsWith('$->define.screens.'), `walk did not descend, got:\n${text}`);
+    assert.ok(text.endsWith('`$->define.screens.'), `walk did not descend, got:\n${text}`);
     assert.ok(!text.includes('####'), 'the line should not have been rewritten');
   });
 
   test('define is not offered part way through a line', async () => {
-    const editor = await openMarkdown('$.screens.Splash\n\nsee $->define.screens');
+    const editor = await openMarkdown('`$.screens.Splash`\n\nsee `$->define.screens');
 
     await acceptSuggestion();
 
@@ -102,14 +113,14 @@ suite('the suggest widget', () => {
   test('a definition under a heading reaches the tree', async () => {
     const editor = await openMarkdown(
       [
-        '$.screens.Splash',
+        '`$.screens.Splash`',
         '',
-        '#### $.screens.Splash',
+        '#### `$.screens.Splash`',
         'The first screen.',
         '',
         '---',
         '',
-        '$->dump',
+        '`$->dump',
       ].join('\n')
     );
 
@@ -122,20 +133,20 @@ suite('the suggest widget', () => {
   test('the walk leaves out concepts that are already defined', async () => {
     const editor = await openMarkdown(
       [
-        '$.screens.Splash $.screens.Login',
+        '`$.screens.Splash` `$.screens.Login`',
         '',
-        '#### $.screens.Splash',
+        '#### `$.screens.Splash`',
         'Already defined.',
         '',
         '---',
         '',
-        '$->define.screens.',
+        '`$->define.screens.',
       ].join('\n')
     );
 
     await acceptSuggestion();
 
     const text = editor.document.getText();
-    assert.ok(text.endsWith('$->define.screens.Login'), `expected Login, got:\n${text}`);
+    assert.ok(text.endsWith('`$->define.screens.Login'), `expected Login, got:\n${text}`);
   });
 });

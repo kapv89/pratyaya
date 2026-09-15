@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.0.0
+
+- **Breaking:** every expression is now written as inline code:
+  `` `$.screens.Splash` ``, `` `$->dump` ``, `` `$->define.auth` ``, and
+  definition headings as `` #### `$.auth.token` ``. Markdown previews with maths
+  support read two bare `$` on a line as a formula, so a spec full of references
+  rendered as run-together maths. Inside backticks the `$` is left alone, and the
+  preview shows each reference in code font.
+- A bare `$.screens.Splash` is no longer a reference: it adds nothing to the tree,
+  gets no colour and no completion.
+- Opening a markdown file that still has bare expressions offers to upgrade it,
+  wrapping each one in backticks in a single undoable edit. **Never ask again**
+  turns the offer off through the new `pratyaya.offerUpgrade` setting.
+- **Pratyaya: Upgrade old-style concept expressions** runs the same upgrade on
+  the active file from the Command Palette. Fenced code blocks and inline code
+  are left untouched by it.
+- Accepting `` `$->dump `` also removes a closing backtick typed after the cursor.
+
 ## 1.4.1
 
 - Colours no longer spread onto text typed at the edge of a coloured range.

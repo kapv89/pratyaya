@@ -36,38 +36,38 @@ async function renameAt(document: vscode.TextDocument, line: number, character: 
 }
 
 const SPEC = [
-  'The $.screens.Splash has a $.screens.Splash.logo.',
+  'The `$.screens.Splash` has a `$.screens.Splash.logo`.',
   '',
-  '#### $.screens.Splash',
-  'The first screen, before $.screens.Login and unlike $.other.Splash.',
+  '#### `$.screens.Splash`',
+  'The first screen, before `$.screens.Login` and unlike `$.other.Splash`.',
 ].join('\n');
 
 const RENAMED = [
-  'The $.screens.Launch has a $.screens.Launch.logo.',
+  'The `$.screens.Launch` has a `$.screens.Launch.logo`.',
   '',
-  '#### $.screens.Launch',
-  'The first screen, before $.screens.Login and unlike $.other.Splash.',
+  '#### `$.screens.Launch`',
+  'The first screen, before `$.screens.Login` and unlike `$.other.Splash`.',
 ].join('\n');
 
 suite('renaming a concept', () => {
   test('F2 offers the concept name under the cursor', async () => {
     const document = await openMarkdown(SPEC);
-    const location = await prepareRename(document, 0, 16);
+    const location = await prepareRename(document, 0, 17);
     assert.equal(location.placeholder, 'Splash');
-    assert.deepEqual([location.range.start.character, location.range.end.character], [14, 20]);
+    assert.deepEqual([location.range.start.character, location.range.end.character], [15, 21]);
   });
 
   test('F2 renames the concept in every reference, children and headings included', async () => {
     const document = await openMarkdown(SPEC);
-    await renameAt(document, 0, 16, 'Launch');
+    await renameAt(document, 0, 17, 'Launch');
     assert.equal(document.getText(), RENAMED);
   });
 
   test('F2 on a definition heading renames the concept, not the heading', async () => {
     const document = await openMarkdown(SPEC);
-    const location = await prepareRename(document, 2, 16);
+    const location = await prepareRename(document, 2, 18);
     assert.equal(location.placeholder, 'Splash');
-    await renameAt(document, 2, 16, 'Launch');
+    await renameAt(document, 2, 18, 'Launch');
     assert.equal(document.getText(), RENAMED);
   });
 
@@ -78,7 +78,7 @@ suite('renaming a concept', () => {
         vscode.commands.executeCommand(
           'vscode.executeDocumentRenameProvider',
           document.uri,
-          new vscode.Position(0, 16),
+          new vscode.Position(0, 17),
           'two words'
         )
       )

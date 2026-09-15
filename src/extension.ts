@@ -15,10 +15,14 @@ import {
   ScopeFunction,
   FUNCTION_ACCESSOR,
   MARKER,
+  OPENER,
+  QUOTE,
+  referenceText,
 } from './concepts';
 import { ConceptHighlighter } from './highlight';
 import { ConceptRenameProvider, renameFromView } from './rename';
 import { ConceptStore } from './store';
+import { upgradeActiveDocument, UpgradeOffer } from './upgrade';
 import { ConceptItem, ConceptTreeProvider, LiveTreeDocumentProvider, LIVE_SCHEME } from './views';
 
 /** Shade of red used for the `invalid` suggestion's swatch. */
@@ -73,6 +77,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     store,
     highlighter,
+    new UpgradeOffer(isEnabled),
     liveDocuments,
     conceptTree,
     treeView,
@@ -90,6 +95,7 @@ export function activate(context: vscode.ExtensionContext) {
       runFunction(store, name)
     ),
     vscode.commands.registerCommand('pratyaya.showTree', () => showLiveTree(liveDocuments)),
+    vscode.commands.registerCommand('pratyaya.upgrade', upgradeActiveDocument),
     vscode.commands.registerCommand('pratyaya.insertPath', (item?: ConceptItem) =>
       insertPath(item)
     ),
@@ -136,7 +142,9 @@ class ConceptCompletionProvider implements vscode.CompletionItemProvider {
     }
 
     const root = this.store.tree(document);
-    const exprRange = new vscode.Range(position.line, context.exprStart, position.line, position.character);
+    // A closing backtick already typed after the cursor goes with the expression.
+    const exprEnd = position.character + (text[position.character] === QUOTE ? 1 : 0);
+    const exprRange = new vscode.Range(position.line, context.exprStart, position.line, exprEnd);
 
     const atLineStart = startsLine(text, context.exprStart);
 
@@ -194,7 +202,7 @@ function conceptItem(
     children.length > 0 ? vscode.CompletionItemKind.Module : vscode.CompletionItemKind.Field
   );
 
-  item.detail = [MARKER, ...segments, key].join('.');
+  item.detail = referenceText([...segments, key]);
   item.insertText = key;
   item.range = replaceRange;
   item.filterText = key;
@@ -285,10 +293,10 @@ function functionItem(
 ): vscode.CompletionItem {
   const item = new ConceptCompletionItem(fn.name, vscode.CompletionItemKind.Function);
 
-  const expression = `${MARKER}${FUNCTION_ACCESSOR}${fn.name}`;
-  item.detail = `${expression} - ${fn.summary}`;
-  // The replace range starts at the marker, so VS Code filters against the whole
-  // expression as typed. Filtering on `dump` alone would never match `$->dump`
+  const expression = `${OPENER}${FUNCTION_ACCESSOR}${fn.name}`;
+  item.detail = `${expression}${QUOTE} - ${fn.summary}`;
+  // The replace range starts at the backtick, so VS Code filters against the whole
+  // expression as typed. Filtering on `dump` alone would never match `` `$->dump ``
   // and the widget would silently drop this item.
   item.filterText = expression;
   item.sortText = fn.name;
@@ -296,7 +304,7 @@ function functionItem(
   item.range = exprRange;
 
   if (fn.path) {
-    // Accepting opens the walk: `$->define.`, then the concepts appear.
+    // Accepting opens the walk: `` `$->define. ``, then the concepts appear.
     item.insertText = `${expression}.`;
     item.command = { command: 'editor.action.triggerSuggest', title: 'Choose a concept' };
   } else {
@@ -313,7 +321,7 @@ function functionItem(
   item.preview = () => {
     const documentation = new vscode.MarkdownString();
     documentation.appendMarkdown(
-      `\`${expression}\` - ${fn.summary} (${countDescendants(root)} concepts).\n\n`
+      `\`\`${expression}${QUOTE}\`\` - ${fn.summary} (${countDescendants(root)} concepts).\n\n`
     );
     documentation.appendCodeblock(previewJson(root), 'json');
     return documentation;
@@ -377,7 +385,7 @@ async function insertPath(item: ConceptItem | undefined) {
   if (!item || !editor) {
     return;
   }
-  const reference = [MARKER, ...item.segments].join('.');
+  const reference = referenceText(item.segments);
   await editor.edit((builder) => {
     for (const selection of editor.selections) {
       builder.replace(selection, reference);

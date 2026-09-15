@@ -3,7 +3,7 @@ import Mocha from 'mocha';
 
 export function run(): Promise<void> {
   const mocha = new Mocha({ ui: 'tdd', color: true, timeout: 20000 });
-  for (const file of ['live.test.js', 'suggest.test.js', 'rename.test.js']) {
+  for (const file of ['live.test.js', 'suggest.test.js', 'rename.test.js', 'upgrade.test.js']) {
     mocha.addFile(path.resolve(__dirname, file));
   }
 

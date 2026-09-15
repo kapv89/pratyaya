@@ -7,7 +7,7 @@ import {
   previewJson,
   resolveNode,
   ConceptNode,
-  MARKER,
+  referenceText,
 } from './concepts';
 
 /** Scheme of the read-only, live-updating JSON view of a document's `root`. */
@@ -139,7 +139,7 @@ export class ConceptTreeProvider
 
   resolveTreeItem(item: vscode.TreeItem, element: ConceptItem): vscode.TreeItem {
     const tooltip = new vscode.MarkdownString();
-    tooltip.appendCodeblock([MARKER, ...element.segments].join('.'), 'text');
+    tooltip.appendCodeblock(referenceText(element.segments), 'text');
     tooltip.appendCodeblock(previewJson(element.node), 'json');
     item.tooltip = tooltip;
     return item;

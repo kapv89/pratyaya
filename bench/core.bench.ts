@@ -54,10 +54,10 @@ console.log();
 
 console.log('-- once per completion request, today --');
 const middle = text.indexOf('\n', Math.floor(text.length / 2));
-const probe = text.slice(0, middle) + '\n$.' + text.slice(middle);
-measure('parseContextAt', () => parseContextAt(probe, middle + 3));
-measure('suggestionsFor at $.', () => suggestionsFor(tree, [], ''));
-measure('walkSuggestions at $->define.', () => walkSuggestions(define, tree, [], ''));
+const probe = text.slice(0, middle) + '\n`$.' + text.slice(middle);
+measure('parseContextAt', () => parseContextAt(probe, middle + 4));
+measure('suggestionsFor at `$.', () => suggestionsFor(tree, [], ''));
+measure('walkSuggestions at `$->define.', () => walkSuggestions(define, tree, [], ''));
 measure('dumpJson(root) - documentation of each $-> item', () => dumpJson(tree));
 measure('dumpJson per top-level item - documentation at $.', () => {
   for (const key of childKeys(tree)) {

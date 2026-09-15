@@ -129,10 +129,10 @@ suite(`editor performance at ${WORDS} words`, () => {
     report('keystroke, with sidebar + live view open', await typeInto(doc.document));
     console.log();
 
-    report('completion at $.', await completeAt(doc.document, '$.', '.'));
-    report('completion at $.screens.', await completeAt(doc.document, '$.screens.', '.'));
-    report('completion at $->', await completeAt(doc.document, '$->', '>'));
-    report('completion at $->define.', await completeAt(doc.document, '$->define.', '.'));
+    report('completion at `$.', await completeAt(doc.document, '`$.', '.'));
+    report('completion at `$.screens.', await completeAt(doc.document, '`$.screens.', '.'));
+    report('completion at `$->', await completeAt(doc.document, '`$->', '>'));
+    report('completion at `$->define.', await completeAt(doc.document, '`$->define.', '.'));
     console.log();
   });
 });
