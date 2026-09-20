@@ -6,6 +6,7 @@ import {
   conceptAt,
   conceptSpans,
   definitionHeadings,
+  definitionInsertion,
   dumpJson,
   dumpText,
   isConceptName,
@@ -18,6 +19,7 @@ import {
   scopeFunctionsMatching,
   startsLine,
   suggestionsFor,
+  undefinedConcepts,
   walkSuggestions,
   Context,
 } from '../src/concepts';
@@ -563,6 +565,195 @@ test('ordinary `$. completion still offers defined concepts', () => {
     ['`$.screens.Splash` `$.screens.Login`', '', '#### `$.screens.Splash`', 'Defined.', '---'].join('\n')
   );
   assert.deepEqual(suggestionsFor(tree, ['screens'], ''), ['Splash', 'Login']);
+});
+
+// --- concepts with no definition ---------------------------------------------
+
+/** Each undefined concept as its path, and the text its range covers. */
+function undefinedIn(text: string): [string, string][] {
+  return undefinedConcepts(text, buildTree(text)).map((concept) => [
+    concept.path.join('.'),
+    text.slice(concept.start, concept.end),
+  ]);
+}
+
+test('every level of a reference is reported, in document order', () => {
+  assert.deepEqual(undefinedIn('The `$.screens.Splash` and `$.screens.Login`.'), [
+    ['screens', 'screens'],
+    ['screens.Splash', 'Splash'],
+    ['screens.Login', 'Login'],
+  ]);
+});
+
+test('a concept is reported on its first reference, not on every mention', () => {
+  const text = 'A `$.a.b`, again `$.a.b`, and `$.a.c`.';
+  const found = undefinedConcepts(text, buildTree(text));
+
+  assert.deepEqual(found.map((concept) => concept.path.join('.')), ['a', 'a.b', 'a.c']);
+  assert.deepEqual(found.map((concept) => text.slice(concept.start, concept.end)), ['a', 'b', 'c']);
+  // `a` and `b` from the first mention; `c` only exists in the third.
+  assert.deepEqual(found.map((concept) => concept.start), [5, 7, 35]);
+});
+
+test('a defined concept is not reported, and its undefined parent still is', () => {
+  const text = ['`$.auth.token`', '', '#### `$.auth.token`', 'A token.'].join('\n');
+  assert.deepEqual(undefinedIn(text), [['auth', 'auth']]);
+});
+
+test('a concept declared only by its own heading is defined', () => {
+  assert.deepEqual(undefinedIn('#### `$.auth.token`\nA token.'), [['auth', 'auth']]);
+});
+
+test('an empty definition still counts, so nothing is reported for it', () => {
+  assert.deepEqual(undefinedIn(['#### `$.a`', '---', '`$.b`'].join('\n')), [['b', 'b']]);
+});
+
+test('what is reported is what the define walk still offers', () => {
+  const text = ['`$.auth.token` and `$.screens.Splash`', '', '#### `$.auth.token`', 'A token.'].join('\n');
+  const tree = buildTree(text);
+
+  assert.deepEqual(undefinedIn(text).map(([path]) => path), ['auth', 'screens', 'screens.Splash']);
+  // The same three, reached the other way round: the walk offers `auth` and
+  // `screens`, and only `screens` leads anywhere deeper.
+  assert.deepEqual(walkSuggestions(define, tree, [], ''), ['auth', 'screens']);
+  assert.deepEqual(pathActions(define, tree, [], 'auth'), { call: true, descend: false });
+  assert.deepEqual(walkSuggestions(define, tree, ['auth'], ''), []);
+  assert.deepEqual(walkSuggestions(define, tree, ['screens'], ''), ['Splash']);
+});
+
+test('a reference is reported wherever it counts for the tree, code fences included', () => {
+  assert.deepEqual(undefinedIn(['```', '`$.a.b`', '```'].join('\n')), [
+    ['a', 'a'],
+    ['a.b', 'b'],
+  ]);
+});
+
+test('a document with no references reports nothing', () => {
+  assert.deepEqual(undefinedIn('Just prose, $5, and `$->dump`.'), []);
+});
+
+// --- writing a definition ----------------------------------------------------
+
+/** The document with the definition written into it, and where the cursor ends up. */
+function written(text: string, path: string[], from: number): { text: string; cursor: number } {
+  const insertion = definitionInsertion(text, path, from);
+  return {
+    text: text.slice(0, insertion.offset) + insertion.text + text.slice(insertion.offset),
+    cursor: insertion.offset + insertion.cursor,
+  };
+}
+
+/** Two definitions in a run at the foot of a spec, parted by a rule. */
+const RUN = [
+  'The `$.a.x` and `$.b.y`.',
+  '',
+  '#### `$.a.x`',
+  '',
+  'First.',
+  '',
+  '---',
+  '',
+  '#### `$.b.y`',
+  '',
+  'Second.',
+].join('\n');
+
+test('a new definition goes after the last of the run it finds', () => {
+  assert.equal(
+    written(RUN, ['a'], RUN.indexOf('a.x')).text,
+    RUN + '\n\n---\n\n#### `$.a`\n\n\n'
+  );
+});
+
+test('a reference inside a definition joins the run it is already in', () => {
+  assert.equal(
+    written(RUN, ['b'], RUN.indexOf('First.')).text,
+    RUN + '\n\n---\n\n#### `$.b`\n\n\n'
+  );
+});
+
+test('the run stops where a definition is no longer followed by another', () => {
+  const split = [
+    'The `$.a.x`.',
+    '',
+    '#### `$.a.x`',
+    '',
+    'First.',
+    '',
+    '---',
+    '',
+    'Some prose in between.',
+    '',
+    '#### `$.b.y`',
+    '',
+    'Second.',
+  ].join('\n');
+
+  // The rule that closed `a.x` now closes the new definition, and `a.x` gets a
+  // fresh one of its own.
+  assert.equal(
+    written(split, ['a'], split.indexOf('a.x')).text,
+    [
+      'The `$.a.x`.',
+      '',
+      '#### `$.a.x`',
+      '',
+      'First.',
+      '',
+      '---',
+      '',
+      '#### `$.a`',
+      '',
+      '',
+      '---',
+      '',
+      'Some prose in between.',
+      '',
+      '#### `$.b.y`',
+      '',
+      'Second.',
+    ].join('\n')
+  );
+});
+
+test('with no definition after it, the block goes at the end of the section', () => {
+  const text = ['# One', '', 'The `$.a` thing.', '', '## Two', '', 'More.'].join('\n');
+  assert.equal(
+    written(text, ['a'], text.indexOf('$.a')).text,
+    ['# One', '', 'The `$.a` thing.', '', '#### `$.a`', '', '', '## Two', '', 'More.'].join('\n')
+  );
+});
+
+test('with no section heading after it either, the block goes at the end', () => {
+  const text = 'The `$.a` thing.';
+  assert.equal(written(text, ['a'], text.indexOf('$.a')).text, text + '\n\n#### `$.a`\n\n\n');
+});
+
+test('a document that does not close definitions with a rule is not given one', () => {
+  const text = ['The `$.a.x`.', '', '#### `$.a.x`', '', 'First.'].join('\n');
+  assert.equal(written(text, ['a'], text.indexOf('a.x')).text, text + '\n\n#### `$.a`\n\n\n');
+});
+
+test('the cursor lands on the empty line the body goes on', () => {
+  const { text, cursor } = written(RUN, ['a'], RUN.indexOf('a.x'));
+  assert.equal(text.slice(cursor - '#### `$.a`\n\n'.length, cursor), '#### `$.a`\n\n');
+  assert.equal(text[cursor], '\n');
+});
+
+test('the concept is defined once the block is written, and nothing else moves', () => {
+  const text = written(RUN, ['a'], RUN.indexOf('a.x')).text;
+  const tree = buildTree(text) as Record<string, Record<string, string>>;
+
+  assert.equal(tree.a['($->def)'], ''); // an empty definition, waiting to be typed
+  assert.deepEqual(undefinedIn(text).map(([path]) => path), ['b']);
+
+  // The definitions already there are untouched, and the new one is last.
+  assert.deepEqual(definitionHeadings(text).map((heading) => heading.segments.join('.')), [
+    'a.x',
+    'b.y',
+    'a',
+  ]);
+  assert.equal(definitionHeadings(text)[0].body, definitionHeadings(RUN)[0].body);
 });
 
 // --- scale -------------------------------------------------------------------

@@ -197,6 +197,12 @@ export interface DefinitionHeading {
   segments: string[];
   /** Everything up to the next rule, heading, or the end of the document. */
   body: string;
+  /**
+   * Where the body stops: the first character of the line that ended it, or the
+   * end of the document. Always the start of a line that closes a definition,
+   * which is what makes it somewhere a new definition can be written.
+   */
+  bodyEnd: number;
 }
 
 /**
@@ -245,6 +251,7 @@ export function definitionHeadings(text: string): DefinitionHeading[] {
       end: lines[i].start + lines[i].text.length,
       segments: match[1].slice(1).split('.'),
       body,
+      bodyEnd: end,
     });
   }
 
@@ -403,6 +410,163 @@ export function renameRanges(text: string, path: string[]): ConceptSpan[] {
     }
   }
   return ranges;
+}
+
+/** A concept that is referenced in the document but never given a definition. */
+export interface UndefinedConcept {
+  /** The path from the top of `root` down to the concept. */
+  path: string[];
+  /** Offsets of the concept's own name, in the first reference that reaches it. */
+  start: number;
+  end: number;
+}
+
+/**
+ * Every concept no `` #### `$.a.b` `` heading defines, in the order they first
+ * appear.
+ *
+ * A concept is reported once, on its own name in the first reference that reaches
+ * it, rather than at every mention. A spec repeats its concepts constantly, and
+ * what is worth knowing is which of them are still undefined, not how often each
+ * one was written. Since referencing a path creates every level of it, a parent is
+ * reported apart from its children: `` `$.auth.token` `` can leave `auth`
+ * undefined while `token` has a definition, or the other way round.
+ *
+ * This is the `$->define` walk seen from the other side - what the walk still
+ * offers is exactly what this reports.
+ */
+export function undefinedConcepts(text: string, root: ConceptNode): UndefinedConcept[] {
+  const found: UndefinedConcept[] = [];
+  const seen = new Set<string>();
+
+  for (const names of references(text)) {
+    for (const name of names) {
+      const key = name.path.join('.');
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      const node = resolveNode(root, name.path);
+      if (node && definitionOf(node) === undefined) {
+        found.push({ path: name.path, start: name.start, end: name.end });
+      }
+    }
+  }
+
+  return found;
+}
+
+/** Where a new definition goes, and what to write there. */
+export interface DefinitionInsertion {
+  /** Offset in the document the text is inserted at. */
+  offset: number;
+  /** The block to write: a heading, an empty line for the body, and any rule around them. */
+  text: string;
+  /** Offset within `text` of that empty line, where the cursor belongs. */
+  cursor: number;
+}
+
+/** A line that is a `---` rule and nothing else. */
+const RULE_RE = /^-{3,}[ \t]*$/;
+
+/** A heading that ends the section before it: levels 1 to 4. */
+const SECTION_HEADING_RE = /^#{1,4}(?!#)/;
+
+/**
+ * Where to write the definition of the concept referenced at `from`.
+ *
+ * Definitions gather into runs at the foot of a spec, so a new one joins the run
+ * rather than landing wherever the cursor happens to be:
+ *
+ * 1. Find the first definition that has not already ended by `from`.
+ * 2. If there is none, the definition goes at the end of the section the
+ *    reference sits in - before the next heading of level 1 to 4, or at the end
+ *    of the document.
+ * 3. Otherwise follow that run for as long as one definition is parted from the
+ *    next by nothing but blank lines and rules, and go after the last of them.
+ *
+ * The block matches the document it lands in: it is preceded by a `---` only
+ * where the document already closes its definitions that way. It never needs one
+ * after it, because every landing point is itself the start of a line that closes
+ * a definition - a rule, a heading, or the end of the document - so the empty
+ * body cannot run on into what follows.
+ */
+export function definitionInsertion(
+  text: string,
+  path: string[],
+  from: number
+): DefinitionInsertion {
+  const headings = definitionHeadings(text);
+  const offset = runEnd(text, headings, from) ?? sectionEnd(text, from);
+  const before = text.slice(0, offset);
+
+  const rule = closesWithRule(text, headings) && !endsWithRule(before) ? '---\n\n' : '';
+  const head = `${blankLine(before)}${rule}${DEFINITION_PREFIX}${referenceText(path)}\n\n`;
+
+  // The trailing newline ends the empty body line the cursor lands on.
+  return { offset, text: `${head}\n`, cursor: head.length };
+}
+
+/** The end of the run of definitions `from` falls before, if there is one. */
+function runEnd(
+  text: string,
+  headings: DefinitionHeading[],
+  from: number
+): number | undefined {
+  let index = headings.findIndex((heading) => heading.bodyEnd > from);
+  if (index === -1) {
+    return undefined;
+  }
+  while (index + 1 < headings.length && consecutive(text, headings[index], headings[index + 1])) {
+    index++;
+  }
+  return headings[index].bodyEnd;
+}
+
+/** Is there nothing but blank lines and rules between one definition and the next? */
+function consecutive(text: string, a: DefinitionHeading, b: DefinitionHeading): boolean {
+  return text
+    .slice(a.bodyEnd, b.start)
+    .split('\n')
+    .every((line) => line.trim() === '' || RULE_RE.test(line.trim()));
+}
+
+/** The end of the section `from` sits in: the next heading of level 1 to 4, or the end. */
+function sectionEnd(text: string, from: number): number {
+  const heading = markdownLines(text).find(
+    (line) => line.start > from && !line.fenced && SECTION_HEADING_RE.test(line.text)
+  );
+  return heading ? heading.start : text.length;
+}
+
+/** Does this document close its definitions with a `---` rule? */
+function closesWithRule(text: string, headings: DefinitionHeading[]): boolean {
+  return headings.some((heading) => RULE_RE.test(lineAt(text, heading.bodyEnd)));
+}
+
+/** The line starting at `offset`. */
+function lineAt(text: string, offset: number): string {
+  const end = text.indexOf('\n', offset);
+  return text.slice(offset, end === -1 ? text.length : end).replace(/\r$/, '');
+}
+
+/** Is the last thing written so far a `---` rule? */
+function endsWithRule(before: string): boolean {
+  const lines = before.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].trim() !== '') {
+      return RULE_RE.test(lines[i].trim());
+    }
+  }
+  return false;
+}
+
+/** The newlines needed for the block to start after one blank line. */
+function blankLine(before: string): string {
+  if (before === '' || before.endsWith('\n\n')) {
+    return '';
+  }
+  return before.endsWith('\n') ? '\n' : '\n\n';
 }
 
 export type Context =

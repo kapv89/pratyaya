@@ -19,6 +19,11 @@ import {
   QUOTE,
   referenceText,
 } from './concepts';
+import {
+  DefineConceptActions,
+  UndefinedConceptDiagnostics,
+  revealDefinition,
+} from './diagnostics';
 import { ConceptHighlighter } from './highlight';
 import { ConceptRenameProvider, renameFromView } from './rename';
 import { ConceptStore } from './store';
@@ -69,7 +74,10 @@ export function activate(context: vscode.ExtensionContext) {
         new ConceptCompletionProvider(store),
         ...TRIGGER_CHARACTERS
       ),
-      vscode.languages.registerRenameProvider(selector, new ConceptRenameProvider(store))
+      vscode.languages.registerRenameProvider(selector, new ConceptRenameProvider(store)),
+      vscode.languages.registerCodeActionsProvider(selector, new DefineConceptActions(), {
+        providedCodeActionKinds: DefineConceptActions.kinds,
+      })
     );
   };
   registerProvider();
@@ -77,6 +85,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     store,
     highlighter,
+    new UndefinedConceptDiagnostics(store, isEnabled),
     new UpgradeOffer(isEnabled),
     liveDocuments,
     conceptTree,
@@ -101,6 +110,9 @@ export function activate(context: vscode.ExtensionContext) {
     ),
     vscode.commands.registerCommand('pratyaya.renameConcept', (item?: ConceptItem, newName?: string) =>
       renameFromView(store, conceptTree, treeView.selection, item, newName)
+    ),
+    vscode.commands.registerCommand('pratyaya.revealDefinition', (uri: vscode.Uri, offset: number) =>
+      revealDefinition(uri, offset)
     ),
     vscode.commands.registerCommand('pratyaya.invalidNotice', () => {
       vscode.window.showWarningMessage(

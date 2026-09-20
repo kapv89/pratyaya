@@ -11,6 +11,7 @@ import {
   resolveNode,
   scopeFunction,
   suggestionsFor,
+  undefinedConcepts,
   walkSuggestions,
   ConceptNode,
 } from '../src/concepts';
@@ -49,6 +50,7 @@ console.log('-- once per keystroke, today --');
 measure('buildTree (store rebuild)', () => buildTree(text));
 measure('definitionHeadings (inside buildTree + again in highlight)', () => definitionHeadings(text));
 measure('conceptSpans (highlight)', () => conceptSpans(text));
+measure('undefinedConcepts (diagnostics)', () => undefinedConcepts(text, tree));
 measure('countDescendants (tree view title)', () => countDescendants(tree));
 console.log();
 

@@ -32,6 +32,7 @@ export class ConceptStore implements vscode.Disposable {
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly treeEmitter = new vscode.EventEmitter<vscode.TextDocument>();
   private readonly spanEmitter = new vscode.EventEmitter<vscode.TextDocument>();
+  private readonly publishEmitter = new vscode.EventEmitter<vscode.TextDocument>();
   private readonly disposables: vscode.Disposable[] = [];
 
   /** Fires, once typing pauses, when a document's `root` object has changed. */
@@ -40,10 +41,19 @@ export class ConceptStore implements vscode.Disposable {
   /** Fires, once typing pauses, when what should be coloured has changed. */
   readonly onDidChangeSpans = this.spanEmitter.event;
 
+  /**
+   * Fires, once typing pauses, whenever a document has been analysed afresh -
+   * whether or not anything about it changed. Anything positioned by offset, as
+   * diagnostics are, has to follow text moving around it, which the two events
+   * above deliberately stay quiet about.
+   */
+  readonly onDidPublish = this.publishEmitter.event;
+
   constructor(private readonly isEnabled: (document: vscode.TextDocument) => boolean) {
     this.disposables.push(
       this.treeEmitter,
       this.spanEmitter,
+      this.publishEmitter,
       vscode.workspace.onDidChangeTextDocument((event) => {
         if (event.contentChanges.length > 0 && this.isEnabled(event.document)) {
           this.schedule(event.document);
@@ -100,6 +110,7 @@ export class ConceptStore implements vscode.Disposable {
     if (previous?.spanKey !== analysis.spanKey) {
       this.spanEmitter.fire(document);
     }
+    this.publishEmitter.fire(document);
   }
 
   private schedule(document: vscode.TextDocument) {

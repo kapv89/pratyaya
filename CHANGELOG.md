@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.1.0
+
+- Concepts that are referenced but never defined are now reported: a faint
+  underline in the editor and an entry in the Problems panel, so the gap between
+  what a spec names and what it explains is visible while you write.
+- Each one is reported once, on its own name in the first reference that reaches
+  it, rather than at every mention - a spec repeats its concepts constantly, and
+  the useful thing is the list of concepts still to pin down. Because
+  referencing a path creates every level of it, a parent is reported apart from
+  its children.
+- It is the `$->define` walk seen from the other side: what the walk still offers
+  is exactly what gets reported, and defining a concept clears it as soon as you
+  pause typing.
+- A quick fix on a reported concept writes its definition heading and puts the
+  cursor where the body goes. The heading joins the run of definitions the spec
+  already keeps - after the last of them - rather than landing beside the
+  reference, and a `---` is written before it only where the document already
+  closes its definitions that way.
+- New `pratyaya.undefinedConcepts` setting: `information` (the default), `hint`,
+  `warning`, or `off`.
+
 ## 2.0.0
 
 - **Breaking:** every expression is now written as inline code:

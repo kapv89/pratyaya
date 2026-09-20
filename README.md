@@ -299,6 +299,61 @@ one wins.
 Definition headings are coloured whole, in the concept colour, once their path
 resolves in the tree.
 
+### Concepts you have not defined yet
+
+Every concept starts undefined: it exists because you referenced it. Pratyaya
+marks the ones that never got a definition, so the gap between what a spec names
+and what it explains is visible while you write, rather than when an agent reads
+it back to you.
+
+Each undefined concept is reported **once**, on its own name in the first
+reference that reaches it. A spec mentions its concepts constantly, and what is
+worth seeing is which ones are still undefined, not how often each was written.
+The Problems panel (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>) then reads as
+the list of concepts left to pin down:
+
+```text
+`$.screens.Splash` is referenced but never defined.
+Type `$->define.screens.Splash` at the start of a line to define it.
+```
+
+Because referencing a path creates every level of it, a parent is reported apart
+from its children. Given `` `$.auth.token` `` and a definition for `token` alone,
+`auth` is reported and `token` is not.
+
+This is [the walk](#the-walk) seen from the other side: what `$->define` still
+offers is exactly what gets reported, and defining a concept clears it as soon as
+you pause typing. References inside fenced code blocks count here too, because
+they count for the tree.
+
+### Writing the definition from the report
+
+The lightbulb on a reported concept - <kbd>Ctrl</kbd>+<kbd>.</kbd> on it, or the
+quick fix on its entry in the Problems panel - offers
+**Define `` `$.a.b` ``**. It writes the heading, puts the cursor on the empty line
+under it, and leaves you to type.
+
+The heading joins the definitions the spec already keeps, rather than landing
+beside the reference:
+
+1. Look for the first definition that has not already ended by the reference.
+2. If there is none, the heading goes at the end of the section the reference
+   sits in - before the next heading of level 1 to 4, or at the end of the
+   document.
+3. Otherwise follow that run of definitions for as long as one is parted from the
+   next by nothing but blank lines and `---` rules, and write the heading after
+   the last of them.
+
+So a spec that gathers its definitions into a block at the foot grows that block,
+in the order the concepts come up. A `---` is written before the new heading only
+where the document already closes its definitions that way, and never one after
+it: every landing point is already a line that ends a definition, so the empty
+body cannot run on into what follows.
+
+`pratyaya.undefinedConcepts` sets how loud this is: `information` by default, a
+faint underline in the editor; `hint` for the faintest marking VS Code has;
+`warning` for a yellow squiggle and a count in the status bar; or `off`.
+
 ## `` `$->dump `` - the tree as JSON
 
 Type `` `$->dump `` anywhere in a line and accept the suggestion. The expression
@@ -388,6 +443,7 @@ stray backtick is also left for you to fix.
 | `pratyaya.enabledLanguages` | `["markdown"]` | Language ids where `$` is active. |
 | `pratyaya.dumpAsCodeBlock` | `true` | Wrap dumped JSON in a fenced `json` block. |
 | `pratyaya.highlightConcepts` | `true` | Colour `$` expressions in the editor. |
+| `pratyaya.undefinedConcepts` | `"information"` | How to report a concept that is referenced but never defined: `information`, `hint`, `warning`, `off`. |
 | `pratyaya.conceptColor.dark` | `#05c3f9` | Concept colour on dark themes. |
 | `pratyaya.conceptColor.light` | `#800c0c` | Concept colour on light themes. |
 | `pratyaya.offerUpgrade` | `true` | Offer to upgrade 1.x expressions when a file that has them is opened. |
@@ -425,6 +481,11 @@ With Pratyaya on, typing is no slower than with it off; the differences between
 those rows are run-to-run noise. The slowest completion seen was 71 ms, for the
 first request after an edit to the 100,000-word document.
 
+Reporting undefined concepts is the one piece of work that scales with the whole
+document rather than with what changed: about 1.7 ms on the 50,000-word spec,
+beside the 1.6 ms the tree itself costs. It runs once typing pauses, never on the
+keystroke path, and not at all with `pratyaya.undefinedConcepts` set to `off`.
+
 To reproduce, `npm run bench:editor` runs the same measurements in a fresh VS Code,
 and `PRATYAYA_BENCH_WORDS=100000 npm run bench:editor` changes the document size.
 
@@ -452,6 +513,8 @@ only when typing pauses or completion needs it,
 [`src/highlight.ts`](src/highlight.ts) colours the expressions,
 [`src/rename.ts`](src/rename.ts) renames a concept from <kbd>F2</kbd> or the
 sidebar,
+[`src/diagnostics.ts`](src/diagnostics.ts) reports the concepts that have no
+definition and writes one on request,
 [`src/upgrade.ts`](src/upgrade.ts) offers and runs the 1.x upgrade,
 [`src/views.ts`](src/views.ts) draws the sidebar and the live JSON view, and
 [`src/extension.ts`](src/extension.ts) is the editor glue.
