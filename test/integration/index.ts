@@ -9,6 +9,7 @@ export function run(): Promise<void> {
     'rename.test.js',
     'upgrade.test.js',
     'diagnostics.test.js',
+    'roots.test.js',
   ]) {
     mocha.addFile(path.resolve(__dirname, file));
   }

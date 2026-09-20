@@ -26,6 +26,7 @@ import {
 } from './diagnostics';
 import { ConceptHighlighter } from './highlight';
 import { ConceptRenameProvider, renameFromView } from './rename';
+import { ConceptRoots } from './roots';
 import { ConceptStore } from './store';
 import { upgradeActiveDocument, UpgradeOffer } from './upgrade';
 import { ConceptItem, ConceptTreeProvider, LiveTreeDocumentProvider, LIVE_SCHEME } from './views';
@@ -49,7 +50,8 @@ function dumpAsCodeBlock(): boolean {
 }
 
 export function activate(context: vscode.ExtensionContext) {
-  const store = new ConceptStore(isEnabled);
+  const roots = new ConceptRoots();
+  const store = new ConceptStore(isEnabled, roots);
   const highlighter = new ConceptHighlighter(store, isEnabled);
   const liveDocuments = new LiveTreeDocumentProvider(store);
   const conceptTree = new ConceptTreeProvider(store, isEnabled);
@@ -83,6 +85,7 @@ export function activate(context: vscode.ExtensionContext) {
   registerProvider();
 
   context.subscriptions.push(
+    roots,
     store,
     highlighter,
     new UndefinedConceptDiagnostics(store, isEnabled),

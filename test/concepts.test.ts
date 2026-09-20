@@ -10,6 +10,7 @@ import {
   dumpJson,
   dumpText,
   isConceptName,
+  mergeTrees,
   parseContextAt,
   pathActions,
   previewJson,
@@ -630,6 +631,76 @@ test('a reference is reported wherever it counts for the tree, code fences inclu
 
 test('a document with no references reports nothing', () => {
   assert.deepEqual(undefinedIn('Just prose, $5, and `$->dump`.'), []);
+});
+
+// --- one tree from several files ---------------------------------------------
+
+test('trees from several files combine into one', () => {
+  const a = buildTree('`$.screens.Splash` and `$.auth.token`');
+  const b = buildTree('`$.screens.Login` and `$.ui.OrgCard`');
+
+  assert.deepEqual(mergeTrees([a, b]), {
+    screens: {
+      '($)': 'screens',
+      Splash: { '($)': 'Splash' },
+      Login: { '($)': 'Login' },
+    },
+    auth: { '($)': 'auth', token: { '($)': 'token' } },
+    ui: { '($)': 'ui', OrgCard: { '($)': 'OrgCard' } },
+  });
+});
+
+test('a definition in one file lands on a concept referenced in another', () => {
+  const merged = mergeTrees([
+    buildTree('The `$.auth.token` is checked.'),
+    buildTree('#### `$.auth.token`\nThe key a device holds.'),
+  ]) as Record<string, Record<string, Record<string, string>>>;
+
+  assert.equal(merged.auth.token['($->def)'], 'The key a device holds.');
+});
+
+test('the later file wins where both define the same concept', () => {
+  const first = buildTree('#### `$.a`\nFirst.');
+  const second = buildTree('#### `$.a`\nSecond.');
+  const definition = (trees: ReturnType<typeof buildTree>[]) =>
+    (mergeTrees(trees) as Record<string, Record<string, string>>).a['($->def)'];
+
+  assert.equal(definition([first, second]), 'Second.');
+  assert.equal(definition([second, first]), 'First.');
+});
+
+test('merging leaves the trees that went into it untouched', () => {
+  const a = buildTree('`$.a.x`');
+  const b = buildTree('`$.a.y`');
+  const before = dumpJson(a);
+
+  const merged = mergeTrees([a, b]);
+
+  assert.equal(dumpJson(a), before, 'the first tree was written into');
+  assert.notEqual(merged.a, a.a, 'the merged tree shares a node with a file of its own');
+});
+
+test('merging nothing, or one tree, is not a special case', () => {
+  assert.deepEqual(mergeTrees([]), {});
+  const one = buildTree('`$.a.b`');
+  assert.deepEqual(mergeTrees([one]), one);
+});
+
+test('a concept undefined in one file is defined by another', () => {
+  const spec = 'The `$.auth.token` is checked.';
+  const glossary = '#### `$.auth.token`\nThe key a device holds.';
+  const root = mergeTrees([buildTree(spec), buildTree(glossary)]);
+
+  // Read against the whole root, only `auth` itself is still undefined.
+  assert.deepEqual(
+    undefinedConcepts(spec, root).map((concept) => concept.path.join('.')),
+    ['auth']
+  );
+  // Read against its own text alone, the file would report both.
+  assert.deepEqual(
+    undefinedConcepts(spec, buildTree(spec)).map((concept) => concept.path.join('.')),
+    ['auth', 'auth.token']
+  );
 });
 
 // --- writing a definition ----------------------------------------------------

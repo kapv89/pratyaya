@@ -302,6 +302,52 @@ function treeFrom(text: string, headings: DefinitionHeading[]): ConceptNode {
   return root;
 }
 
+/**
+ * One tree built from several documents.
+ *
+ * Concepts combine by name, so a path written in one file and continued in
+ * another is a single branch. Keys keep the order they were first seen, which
+ * makes the merge read like the files did, in the order they were merged. The
+ * metadata keys are plain values and the last file to carry one wins, so a
+ * concept defined twice across a root takes the later definition - the same rule
+ * a single document already follows.
+ *
+ * Nothing here is shared with the trees that went in: they are cached per file
+ * and must not move when a root is assembled.
+ */
+export function mergeTrees(trees: ConceptNode[]): ConceptNode {
+  const root: ConceptNode = {};
+  for (const tree of trees) {
+    mergeInto(root, tree);
+  }
+  return root;
+}
+
+function mergeInto(target: ConceptNode, source: ConceptNode): void {
+  for (const key of Object.keys(source)) {
+    const value = source[key];
+    if (typeof value === 'string') {
+      target[key] = value; // `($)` and `($->def)`: the later file wins
+      continue;
+    }
+    const existing = target[key];
+    if (existing && typeof existing === 'object') {
+      mergeInto(existing, value);
+    } else {
+      target[key] = copy(value);
+    }
+  }
+}
+
+function copy(node: ConceptNode): ConceptNode {
+  const copied: ConceptNode = {};
+  for (const key of Object.keys(node)) {
+    const value = node[key];
+    copied[key] = typeof value === 'string' ? value : copy(value);
+  }
+  return copied;
+}
+
 /** Walks `segments` from `root`, or returns undefined if the path is unknown. */
 export function resolveNode(root: ConceptNode, segments: string[]): ConceptNode | undefined {
   let node: ConceptNode = root;

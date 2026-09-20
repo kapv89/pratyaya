@@ -140,6 +140,15 @@
           "default": true,
           "description": "Colour $ concept expressions in the editor."
         },
+        "pratyaya.roots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Glob patterns whose markdown files share one concept tree. Each pattern is a root of its own, and a file matched by two joins the first. Gather several globs into one root by writing them as one pattern: {spec/**/*.md,shared/glossary.md}. With none set, every document keeps the tree of its own text.",
+          "markdownDescription": "Glob patterns whose markdown files share one concept tree — a reference in one completes, resolves and renames against the concepts of all of them.\n\nEach pattern is a root of its own, and a file matched by two joins the first. Gather several globs into one root by writing them as one pattern: `{spec/**/*.md,shared/glossary.md}`.\n\nWith none set, every document keeps the tree of its own text."
+        },
         "pratyaya.undefinedConcepts": {
           "type": "string",
           "enum": [

@@ -2,6 +2,18 @@
 
 ## 2.1.0
 
+- Several files can now share one concept tree. Point the new `pratyaya.roots`
+  at the globs that belong together and a reference written in any of their files
+  completes, resolves, renames and dumps against the concepts of all of them: a
+  definition in one file defines that concept everywhere, <kbd>F2</kbd> renames
+  across every file of the root whether it is open or not, and `$->dump` writes
+  the whole root.
+- Each pattern is a root of its own, so two specs in one repo stay apart; write
+  several globs as one pattern to gather them into one root. With none set,
+  nothing is shared and every document keeps the tree of its own text.
+- Members are read once in the background and kept current by a watcher, and an
+  open editor always wins over the copy on disk - so a concept typed into one
+  file is offered in another with nothing saved in between.
 - Concepts that are referenced but never defined are now reported: a faint
   underline in the editor and an entry in the Problems panel, so the gap between
   what a spec names and what it explains is visible while you write.

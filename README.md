@@ -1,5 +1,17 @@
 # Pratyaya - Monumentally Scale Your Prompts
 
+A spec is only as good as its nouns. Write fifty pages for a coding agent and the
+same idea turns up as `LoginButton`, as `login-button`, and as "the login CTA" -
+and the agent builds three of them. Pratyaya makes every concept something you
+reference rather than retype: type `` `$. `` and the names already in the document
+complete themselves, so a spec's vocabulary holds still while the spec keeps
+growing. When one file stops being enough, point Pratyaya at the folder: the
+whole set shares a single vocabulary, so a concept defined in `auth.md` completes
+in `screens.md`, and renaming it moves every mention in every file at once. Those
+references build a concept tree as you write, any concept can carry its definition
+beside the places it is used, and the whole map drops into your prompt as JSON -
+so the agent starts from your vocabulary instead of inventing one.
+
 [VSCode Marketplace Page](https://marketplace.visualstudio.com/items?itemName=kapv89.pratyaya)
 
 Install inside VSCode:
@@ -89,7 +101,9 @@ Completion always reads the text exactly as it is at that moment, and colours an
 views catch up as soon as you pause typing. Because the tree is derived rather
 than stored, it can never drift from what the document says: writing a new path
 grows it, deleting a mention shrinks it, reopening the file reconstructs it.
-Nothing is written to disk besides your markdown.
+Nothing is written to disk besides your markdown. A spec that has outgrown one
+file can share a single tree across several - see
+[Several files, one tree](#several-files-one-tree).
 
 `$` opens a scope holding two things, side by side:
 
@@ -378,6 +392,64 @@ concept before reading the spec, or keep one at the end of a spec you hand over
 whole. The [shape of `root`](#the-shape-of-root) section describes the JSON for
 anything that consumes it.
 
+## Several files, one tree
+
+A spec outgrows one file long before it outgrows one set of concepts. Point
+`pratyaya.roots` at the files that belong together and they share a single
+`root`:
+
+```json
+"pratyaya.roots": ["spec/**/*.md"]
+```
+
+That belongs in the workspace's `.vscode/settings.json`. The globs are read
+relative to the workspace folder, and keeping the setting beside the spec means
+anyone who opens the repo gets the same root without configuring anything. The
+same pattern in your personal settings would form a root in every project you
+open that happens to have a `spec` folder. In a multi-root workspace it goes in
+the `.code-workspace` file: the setting is window-scoped, so one list covers every
+folder and a single folder's own settings are ignored.
+
+A reference written in any of them then completes, resolves, renames and dumps
+against the concepts of all of them:
+
+| | |
+| --- | --- |
+| **Completion** | `` `$. `` in `spec/screens.md` offers concepts first written in `spec/auth.md`. |
+| **Definitions** | A `` #### `$.auth.token` `` heading in one file defines that concept for every file. |
+| **Undefined concepts** | A concept is only [reported](#concepts-you-have-not-defined-yet) when no file in the root defines it. |
+| **Renaming** | <kbd>F2</kbd> renames the concept in every file of the root, open in an editor or not, in one undoable edit. |
+| **The dump** | `` `$->dump `` writes the whole root, so one block still holds every concept in the spec. The Concepts view and the live JSON view show the whole root too. |
+
+**Each pattern is a root of its own.** Two specs in one repo stay apart by
+getting a pattern each, and a file matched by two patterns joins the first.
+To gather several globs into *one* root, write them as one pattern:
+
+```json
+"pratyaya.roots": ["{spec/**/*.md,shared/glossary.md}", "rfcs/**/*.md"]
+```
+
+**With no patterns set, nothing is shared** and every document keeps the tree of
+its own text, exactly as before. A file that matches no pattern does the same.
+
+### How the files are read
+
+Members are found once, in the background, when Pratyaya wakes, and a watcher
+keeps up with them afterwards - a file saved in another window, or changed by a
+branch switch, reaches the tree without reopening anything.
+
+- **An open editor always wins over the copy on disk.** A concept typed into one
+  file a moment ago is offered in another with nothing saved in between, which is
+  how Pratyaya has always treated the file you are editing.
+- **Files are merged in path order**, so the tree reads the same however you got
+  there. Concepts keep the order they were first seen, and where two files define
+  the same concept the later one wins - the rule a single document already
+  follows for two definitions.
+- **A file with no `$` references contributes nothing**, so a README or a
+  changelog caught by a broad pattern cannot put anything in the tree.
+  `node_modules` is never scanned, and what a root costs to assemble and keep
+  current is [measured](#performance).
+
 ## The invalid state
 
 Once `` `$. `` or `` `$-> `` has been typed, anything that is not a well formed
@@ -441,6 +513,7 @@ stray backtick is also left for you to fix.
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `pratyaya.enabledLanguages` | `["markdown"]` | Language ids where `$` is active. |
+| `pratyaya.roots` | `[]` | Globs whose files [share one concept tree](#several-files-one-tree). Each pattern is a root of its own. |
 | `pratyaya.dumpAsCodeBlock` | `true` | Wrap dumped JSON in a fenced `json` block. |
 | `pratyaya.highlightConcepts` | `true` | Colour `$` expressions in the editor. |
 | `pratyaya.undefinedConcepts` | `"information"` | How to report a concept that is referenced but never defined: `information`, `hint`, `warning`, `off`. |
@@ -486,6 +559,20 @@ document rather than with what changed: about 1.7 ms on the 50,000-word spec,
 beside the 1.6 ms the tree itself costs. It runs once typing pauses, never on the
 keystroke path, and not at all with `pratyaya.undefinedConcepts` set to `off`.
 
+**A root costs less per keystroke than one file of the same size.** Each member's
+tree is cached on its own, so a change to one file rebuilds that file and merges
+the root again. On the same 50,000-word spec split across ten files that is
+0.5 ms, against 1.6 ms to rebuild it as a single document — most of a spec is not
+the file you are typing in. Merging ten cached trees is 0.3 ms of that, and
+assembling the root from cold, which the scan does once, is 2.0 ms on top of
+reading the files off disk.
+
+Splitting the same words further barely moves it: at forty files the merge is
+0.4 ms, a cold assembly 2.5 ms, and a keystroke still 0.5 ms. It is the words
+that cost, not the files. What the scan itself spends on I/O depends on your disk
+and how wide the pattern is, and is paid once, in the background.
+`npm run bench 50000 40` measures all three for a given word count and file count.
+
 To reproduce, `npm run bench:editor` runs the same measurements in a fresh VS Code,
 and `PRATYAYA_BENCH_WORDS=100000 npm run bench:editor` changes the document size.
 
@@ -497,6 +584,7 @@ npm test               # core unit tests (no editor needed)
 npm run test:integration   # drives a real VS Code instance
 npm run test:all
 npm run bench          # core timings on a generated 50,000-word spec
+npm run bench 50000 40 # the same words as a root of 40 files
 npm run bench:editor   # the same spec in a real VS Code
 npx vsce package       # builds pratyaya-<version>.vsix
 ```
@@ -510,6 +598,8 @@ dumping are all unit tested in [`test/concepts.test.ts`](test/concepts.test.ts).
 tested in [`test/legacy.test.ts`](test/legacy.test.ts).
 [`src/store.ts`](src/store.ts) keeps a live analysis of each document, redone
 only when typing pauses or completion needs it,
+[`src/roots.ts`](src/roots.ts) gathers the files that share one tree and keeps
+them current,
 [`src/highlight.ts`](src/highlight.ts) colours the expressions,
 [`src/rename.ts`](src/rename.ts) renames a concept from <kbd>F2</kbd> or the
 sidebar,

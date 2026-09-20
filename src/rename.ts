@@ -83,9 +83,17 @@ export async function renameEdit(
     }
   }
 
-  for (const span of renameRanges(document.getText(), path)) {
-    const range = new vscode.Range(document.positionAt(span.start), document.positionAt(span.end));
-    edit.replace(document.uri, range, newName);
+  // Every file of the root, not just this one: a concept is renamed wherever the
+  // tree it belongs to was written, open in an editor or not.
+  for (const uri of store.members(document)) {
+    const target =
+      uri.toString() === document.uri.toString()
+        ? document
+        : await vscode.workspace.openTextDocument(uri);
+    for (const span of renameRanges(target.getText(), path)) {
+      const range = new vscode.Range(target.positionAt(span.start), target.positionAt(span.end));
+      edit.replace(uri, range, newName);
+    }
   }
   return edit;
 }

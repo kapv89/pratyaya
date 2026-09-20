@@ -7,6 +7,7 @@ import {
   countDescendants,
   definitionHeadings,
   dumpJson,
+  mergeTrees,
   parseContextAt,
   resolveNode,
   scopeFunction,
@@ -41,9 +42,20 @@ const tree = buildTree(text);
 const define = scopeFunction('define')!.path!;
 const lines = text.split('\n').length;
 
+// The same spec split across a root's files. Each part gets its own seed, so the
+// files share almost no concepts and the merged tree is as large as a root of
+// this size ever gets - the expensive case, not the flattering one.
+const files = Number(process.argv[3] ?? 10);
+const parts = Array.from({ length: files }, (_, i) => generateSpec(Math.round(words / files), i + 1));
+const partTrees = parts.map((part) => buildTree(part.text));
+const root = mergeTrees(partTrees);
+
 console.log(`document: ${spec.words} words, ${(text.length / 1024).toFixed(0)} KB, ${lines} lines`);
 console.log(`          ${spec.references} references, ${spec.definitions} definitions, ${countDescendants(tree)} concepts in the tree`);
 console.log(`          dump is ${(dumpJson(tree).length / 1024).toFixed(0)} KB of JSON`);
+console.log(
+  `root:     the same words across ${files} files, ${countDescendants(root)} concepts merged`
+);
 console.log();
 
 console.log('-- once per keystroke, today --');
@@ -66,3 +78,16 @@ measure('dumpJson per top-level item - documentation at $.', () => {
     dumpJson(resolveNode(tree, [key]) as ConceptNode);
   }
 });
+console.log();
+
+console.log(`-- a root of ${files} files, once the scan has read them --`);
+// What activation costs in CPU, on top of reading the files off disk.
+measure(`buildTree x${files} (assembling the root from cold)`, () =>
+  parts.map((part) => buildTree(part.text))
+);
+// Every member's tree is cached, so a change to one file rebuilds that file and
+// merges the root again. That is the whole of what a root adds to a keystroke.
+measure(`mergeTrees x${files} (any one member changed)`, () => mergeTrees(partTrees));
+measure('one member edited: rebuild that file, merge the root', () =>
+  mergeTrees([buildTree(parts[0].text), ...partTrees.slice(1)])
+);

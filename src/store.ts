@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { analyze, Analysis, ConceptNode } from './concepts';
+import { ConceptRoots } from './roots';
 
 /** How long typing has to pause before colours and views catch up. */
 const PUBLISH_DELAY_MS = 120;
@@ -49,7 +50,15 @@ export class ConceptStore implements vscode.Disposable {
    */
   readonly onDidPublish = this.publishEmitter.event;
 
-  constructor(private readonly isEnabled: (document: vscode.TextDocument) => boolean) {
+  constructor(
+    private readonly isEnabled: (document: vscode.TextDocument) => boolean,
+    private readonly roots?: ConceptRoots
+  ) {
+    if (roots) {
+      // A file read from disk, or one saved in another window, moves the whole
+      // root's tree without any document here having changed.
+      this.disposables.push(roots.onDidChangeRoot((pattern) => this.announce(pattern)));
+    }
     this.disposables.push(
       this.treeEmitter,
       this.spanEmitter,
@@ -74,9 +83,18 @@ export class ConceptStore implements vscode.Disposable {
     }
   }
 
-  /** The document's `root` object, as of its current text. */
+  /**
+   * The `root` object this document writes into: the whole root's tree when it
+   * belongs to one, and otherwise the tree of its own text.
+   */
   tree(document: vscode.TextDocument): ConceptNode {
-    return this.analysis(document).tree;
+    return this.roots?.treeFor(document.uri) ?? this.analysis(document).tree;
+  }
+
+  /** Every file whose references build this document's tree, itself included. */
+  members(document: vscode.TextDocument): vscode.Uri[] {
+    const members = this.roots?.membersOf(document.uri) ?? [];
+    return members.length > 0 ? members : [document.uri];
   }
 
   /** The document's analysis, as of its current text. */
@@ -111,6 +129,26 @@ export class ConceptStore implements vscode.Disposable {
       this.spanEmitter.fire(document);
     }
     this.publishEmitter.fire(document);
+
+    // One member's edit is a change to every member's tree.
+    const pattern = this.roots?.patternFor(document.uri);
+    if (pattern !== undefined) {
+      this.announce(pattern, document);
+    }
+  }
+
+  /** Tells the open files of a root that their shared tree has moved. */
+  private announce(pattern: string, except?: vscode.TextDocument) {
+    for (const document of vscode.workspace.textDocuments) {
+      if (
+        document !== except &&
+        this.isEnabled(document) &&
+        this.roots?.patternFor(document.uri) === pattern
+      ) {
+        this.treeEmitter.fire(document);
+        this.publishEmitter.fire(document);
+      }
+    }
   }
 
   private schedule(document: vscode.TextDocument) {
