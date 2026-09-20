@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.1
+
+- The sample screenshot in the README pointed at a file that no longer
+  exists, so it rendered as a broken image on the Marketplace listing. Only the
+  listing changes; the extension itself is unchanged from 2.1.0.
+
 ## 2.1.0
 
 - Several files can now share one concept tree. Point the new `pratyaya.roots`
